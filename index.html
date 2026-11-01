@@ -35,7 +35,7 @@ input.txt{width:100%;font-size:19px;padding:10px;border:2px solid var(--mut);bor
 <img id="prev" alt="">
 </section>
 <section><b>Find it</b>
-<div class="row"><input id="q" type="search" placeholder="where's the tractor fuse?"><button id="micFind" class="sec" style="flex:0">🎤</button></div>
+<div class="row"><input id="q" type="search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" enterkeyhint="search" placeholder="where's the tractor fuse?"><button id="micFind" class="sec" style="flex:0">🎤</button></div>
 <div class="row"><select id="place"><option value="">All places</option></select><select id="tagf"><option value="">All tags</option></select></div>
 <div id="list"></div></section>
 <section id="photoSec"><b>📷 Photos</b>
@@ -102,7 +102,8 @@ function placeOf(loc){const s=loc.split(/,|\b(?:in|on|at|under|of|inside|behind)
 const FILL=new Set('where where\'s wheres whered where\'d is are was did i put my the a an find it at in on under of to that those these have left'.split(' '));
 function words(s){return s.toLowerCase().replace(/[^a-z0-9' ]/g,' ').split(/\s+/).filter(w=>w&&!FILL.has(w)).map(w=>w.replace(/'s$/,'').replace(/s$/,''))}
 function lev(a,b){const d=[...Array(b.length+1).keys()];for(let i=1;i<=a.length;i++){let p=d[0];d[0]=i;for(let j=1;j<=b.length;j++){const t=d[j];d[j]=Math.min(d[j]+1,d[j-1]+1,p+(a[i-1]===b[j-1]?0:1));p=t}}return d[b.length]}
-function score(it,q){const qw=words(q);if(!qw.length)return 1;const hw=words([it.item,it.location,it.text,it.tag||''].join(' '));let s=0;
+const flat=s=>String(s||'').toLowerCase().replace(/\s+/g,' ').trim();
+function score(it,q){const fq=flat(q);if(!fq)return 1;const hay=flat([it.item,it.location,it.text,it.tag,it.notes].join(' \u0001 '));if(flat(it.item).includes(fq))return 1000;if(hay.includes(fq))return 900;const qw=words(q);if(!qw.length)return 0;const hw=words([it.item,it.location,it.text,it.tag||''].join(' '));let s=0;
  for(const w of qw){let best=0;for(const h of hw){if(h===w)best=Math.max(best,3);else if(h.startsWith(w)||w.startsWith(h)&&h.length>2)best=Math.max(best,2);else if(w.length>3&&lev(w,h)<=1+(w.length>6))best=Math.max(best,1)}s+=best}return s}
 function search(q){return items.map(it=>[score(it,q),it]).filter(x=>x[0]>0).sort((a,b)=>b[0]-a[0]||b[1].ts-a[1].ts).map(x=>x[1])}
 function putOf(i){return i.put||(i.history&&i.history[0]&&i.history[0].ts)||i.ts||null}
@@ -134,7 +135,7 @@ function renderRecent(){const box=$('recentBox');const r=recent.map(id=>items.fi
  box.style.display=(!r.length||$('q').value.trim()||$('place').value||$('tagf').value)?'none':'block';
  $('recent').innerHTML=r.map(i=>`<div class="ritem" data-id="${i.id}" style="padding:6px 0;cursor:pointer">${photoOf(i)?`<button type="button" class="thumb" data-v="${i.id}" aria-label="View photo of ${esc(i.item)}" style="vertical-align:middle;margin-right:8px"><img src="${photoOf(i)}" alt="Photo of ${esc(i.item)}" style="width:56px;height:56px;object-fit:cover;border-radius:8px;display:block"></button>`:''}<b>${esc(i.item)}</b> — <span class="loc">${esc(i.location||'(no location)')}</span>${putOf(i)?`<div class="meta" style="font-size:13px">${esc(whenLine(i))}</div>`:''}</div>`).join('')}
 function esc(s){return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
-function render(){const sel=$('place'),cur=sel.value,places=[...new Set(items.map(i=>placeOf(i.location)))].sort();
+let renderedQ=null;function render(){renderedQ=$('q').value;const sel=$('place'),cur=sel.value,places=[...new Set(items.map(i=>placeOf(i.location)))].sort();
  sel.innerHTML='<option value="">All places</option>'+places.map(p=>`<option ${p===cur?'selected':''}>${esc(p)}</option>`).join('');
  const tf=$('tagf'),tcur=tf.value;tf.innerHTML='<option value="">All tags</option>'+[...new Set(items.map(i=>i.tag).filter(Boolean))].sort().map(t=>`<option ${t===tcur?'selected':''}>${esc(t)}</option>`).join('');
  const filtered=!!($('q').value.trim()||sel.value||tf.value);let r=$('q').value.trim()?search($('q').value):items.slice();if(sel.value)r=r.filter(i=>placeOf(i.location)===sel.value);if(tf.value)r=r.filter(i=>i.tag===tf.value);if(filtered)editing=null;
@@ -160,7 +161,7 @@ function doSave(){try{const w=$('what').value.trim(),l=$('where').value.trim();$
  if(it){$('what').value='';$('where').value='';$('tag').value='';pendingPhoto=null;$('prev').style.display='none';try{$('photo').value=''}catch(e){}flash('✅ Saved: '+it.item)}}catch(e){banner('⚠️ Save error: '+e.message)}}
 function flash(m,act,ms){const f=$('flash');f.textContent=m;if(act){const b=document.createElement('button');b.id='undo';b.textContent=act.label;b.style.cssText='margin-left:12px;background:#fff;color:#1f6f3f;padding:6px 14px;border-radius:8px;border:0;font-weight:700';b.onclick=()=>{f.style.display='none';act.fn()};f.appendChild(b)}f.style.display='block';clearTimeout(flash.t);flash.t=setTimeout(()=>f.style.display='none',ms||2500)}
 $('save').onclick=doSave;$('what').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();$('where').focus()}});$('where').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();doSave()}});['what','where'].forEach(k=>$(k).addEventListener('input',()=>{if($(k).value.trim())$(k+'Err').style.display='none'}));
-$('q').oninput=render;$('place').onchange=render;$('tagf').onchange=render;$('pq').oninput=renderPhotos;
+{const qr=e=>{if(e.type==='input'||$('q').value!==renderedQ)render()};['input','keyup','compositionend','change','search','paste','cut'].forEach(ev=>$('q').addEventListener(ev,qr));}$('place').onchange=render;$('tagf').onchange=render;$('pq').oninput=renderPhotos;
 $('pToggle').onclick=()=>{const v=$('pview'),show=v.style.display==='none';v.style.display=show?'block':'none';$('pToggle').textContent=show?'🖼 Hide photos':'🖼 Show photos';if(show)renderPhotos()};
 $('pgrid').onclick=e=>{const c=e.target.closest('.card');if(c)found(c.dataset.id)};$('pmatch').onclick=e=>{const m=e.target.closest('.match');if(m)found(m.dataset.id)};
 $('fphoto').onchange=e=>{const f=e.target.files&&e.target.files[0];if(f)findByPhoto(f);e.target.value=''};
@@ -180,5 +181,5 @@ try{if('serviceWorker'in navigator&&location.protocol==='https:'){const had=!!na
  navigator.serviceWorker.register('sw.js',{updateViaCache:'none'}).then(r=>{r.update().catch(()=>{});document.addEventListener('visibilitychange',()=>{if(!document.hidden)r.update().catch(()=>{})})}).catch(()=>{})}}catch(e){}
 window.app={get items(){return items},get mode(){return mode},exportData,importData,reorder,sim,get photos(){return photos},split,search,ready:null};render();window.app.ready=initStorage();
 </script>
-<p class="meta" id="ver" style="text-align:center;margin:16px 0 8px">Where Did I Put It · v12</p>
+<p class="meta" id="ver" style="text-align:center;margin:16px 0 8px">Where Did I Put It · v13</p>
 </body></html>
