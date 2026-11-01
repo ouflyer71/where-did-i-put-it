@@ -1,0 +1,82 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Where Did I Put It</title><link rel="manifest" href="manifest.json"><meta name="theme-color" content="#1f6f3f">
+<style>
+:root{--bg:#fff;--fg:#111;--card:#f2f2ee;--acc:#1f6f3f;--mut:#555}
+body.dark{--bg:#121412;--fg:#f2f2f2;--card:#22261f;--acc:#4fbf78;--mut:#aaa}
+*{box-sizing:border-box}body{margin:0;font:19px/1.4 system-ui,sans-serif;background:var(--bg);color:var(--fg);padding:12px;max-width:700px;margin:auto}
+h1{font-size:24px;margin:6px 0;display:flex;justify-content:space-between;align-items:center}
+textarea,input[type=search],select{width:100%;font-size:20px;padding:12px;border:2px solid var(--mut);border-radius:10px;background:var(--bg);color:var(--fg)}
+button,label.btn{font-size:19px;min-height:52px;min-width:52px;padding:10px 16px;border:0;border-radius:10px;background:var(--acc);color:#fff;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;justify-content:center}
+button.sec{background:var(--card);color:var(--fg);border:2px solid var(--mut)}
+.row{display:flex;gap:8px;margin:8px 0;flex-wrap:wrap}.row>*{flex:1}
+section{background:var(--card);border-radius:14px;padding:12px;margin:12px 0}
+.item{border-top:1px solid var(--mut);padding:10px 0;display:flex;gap:10px}.item img{width:80px;height:80px;object-fit:cover;border-radius:8px}
+.loc{color:var(--acc);font-weight:700}.meta{color:var(--mut);font-size:15px}.item .acts button{min-height:44px;font-size:16px;padding:6px 10px;margin:4px 4px 0 0}
+#prev{max-width:120px;display:none;border-radius:8px}
+</style></head><body>
+<div id="banner" style="display:none;background:#b3261e;color:#fff;padding:12px;border-radius:10px;font-weight:600"></div><div id="flash" style="display:none;position:fixed;bottom:16px;left:16px;right:16px;background:#1f6f3f;color:#fff;padding:14px;border-radius:10px;text-align:center;z-index:9"></div><h1>📍 Where Did I Put It <button class="sec" id="theme" aria-label="theme">🌓</button></h1>
+<section><b>Put something away</b>
+<textarea id="entry" rows="2" placeholder="spare tractor fuse, red toolbox, top drawer, barn"></textarea>
+<div class="row"><button id="micAdd" class="sec">🎤 Speak</button><label class="btn sec" style="color:var(--fg)">📷 Photo<input id="photo" type="file" accept="image/*" capture="environment" hidden></label><button id="save">Save</button></div>
+<img id="prev" alt="">
+</section>
+<section><b>Find it</b>
+<div class="row"><input id="q" type="search" placeholder="where's the tractor fuse?"><button id="micFind" class="sec" style="flex:0">🎤</button></div>
+<select id="place"><option value="">All places</option></select>
+<div id="list"></div></section>
+<section class="row"><button class="sec" id="exp">⬇ Export backup</button><label class="btn sec" style="color:var(--fg)">⬆ Import<input id="imp" type="file" accept="application/json" hidden></label></section>
+<script>
+const KEY='wdipi.items';let items=[],pendingPhoto=null,mode='memory',idb=null;const mem={};
+const $=id=>document.getElementById(id);
+function banner(msg){try{const b=$('banner');b.textContent=msg;b.style.display=msg?'block':'none'}catch(e){}}
+function lsOK(){try{const t='__t';localStorage.setItem(t,'1');localStorage.removeItem(t);return true}catch(e){return false}}
+function kvGet(k){if(mode==='local'){try{return localStorage.getItem(k)}catch(e){}}return mem[k]??null}
+function kvSet(k,v){mem[k]=v;if(mode==='local'){try{localStorage.setItem(k,v);return true}catch(e){banner('⚠️ Phone storage is full or blocked. Item saved for this session only. Export a backup!');return false}}
+ if(mode==='idb'&&idb){try{const tx=idb.transaction('kv','readwrite');tx.objectStore('kv').put(v,k);tx.onerror=()=>banner('⚠️ Could not write to storage. Export a backup!')}catch(e){banner('⚠️ Storage error. Export a backup!')}}return true}
+function store(){try{kvSet(KEY,JSON.stringify(items))}catch(e){banner('⚠️ Could not save to storage: '+e.message)}}
+function openIDB(){return new Promise(res=>{try{if(!window.indexedDB)return res(null);const r=indexedDB.open('wdipi',1);r.onupgradeneeded=()=>r.result.createObjectStore('kv');r.onsuccess=()=>res(r.result);r.onerror=()=>res(null);r.onblocked=()=>res(null);setTimeout(()=>res(null),2000)}catch(e){res(null)}})}
+function idbGet(k){return new Promise(res=>{try{const q=idb.transaction('kv').objectStore('kv').get(k);q.onsuccess=()=>res(q.result??null);q.onerror=()=>res(null)}catch(e){res(null)}})}
+function parse(j){try{const a=JSON.parse(j||'[]');return Array.isArray(a)?a:[]}catch(e){return[]}}
+async function initStorage(){if(lsOK()){mode='local';items=parse(kvGet(KEY))}else{idb=await openIDB();if(idb){mode='idb';const prior=items;items=parse(await idbGet(KEY));prior.forEach(p=>{if(!items.some(i=>i.id===p.id))items.unshift(p)});if(prior.length)store();banner('')}
+ else{mode='memory';banner('⚠️ This viewer blocks storage — items will be lost when you close it. Open this page in Chrome or Safari to keep them.')}}render()}
+function ask(fn,...a){try{return fn.apply(window,a)}catch(e){return null}}
+function split(t){t=t.trim();let i=t.indexOf(',');if(i>0)return{item:t.slice(0,i).trim(),location:t.slice(i+1).trim()};
+ const m=t.match(/^(.+?)\s+(?:is\s+|are\s+)?(in|on|at|under|inside|behind)\s+(.+)$/i);return m?{item:m[1].trim(),location:(m[2]+' '+m[3]).trim()}:{item:t,location:''}}
+function placeOf(loc){const s=loc.split(/,|\b(?:in|on|at|under|of|inside|behind)\b/i).map(x=>x.trim()).filter(Boolean);let p=(s[s.length-1]||'').toLowerCase().replace(/^(the|my|a)\s+/,'');return p||'unsorted'}
+const FILL=new Set('where where\'s wheres whered where\'d is are was did i put my the a an find it at in on under of to that those these have left'.split(' '));
+function words(s){return s.toLowerCase().replace(/[^a-z0-9' ]/g,' ').split(/\s+/).filter(w=>w&&!FILL.has(w)).map(w=>w.replace(/'s$/,'').replace(/s$/,''))}
+function lev(a,b){const d=[...Array(b.length+1).keys()];for(let i=1;i<=a.length;i++){let p=d[0];d[0]=i;for(let j=1;j<=b.length;j++){const t=d[j];d[j]=Math.min(d[j]+1,d[j-1]+1,p+(a[i-1]===b[j-1]?0:1));p=t}}return d[b.length]}
+function score(it,q){const qw=words(q);if(!qw.length)return 1;const hw=words([it.item,it.location,it.text].join(' '));let s=0;
+ for(const w of qw){let best=0;for(const h of hw){if(h===w)best=Math.max(best,3);else if(h.startsWith(w)||w.startsWith(h)&&h.length>2)best=Math.max(best,2);else if(w.length>3&&lev(w,h)<=1+(w.length>6))best=Math.max(best,1)}s+=best}return s}
+function search(q){return items.map(it=>[score(it,q),it]).filter(x=>x[0]>0).sort((a,b)=>b[0]-a[0]||b[1].ts-a[1].ts).map(x=>x[1])}
+function add(text,photo){if(!text.trim())return null;const p=split(text);const it={id:Date.now().toString(36)+Math.random().toString(36).slice(2,6),...p,text:text.trim(),photo:photo||null,ts:Date.now(),history:[]};items.unshift(it);store();render();return it}
+function move(id,newLoc){const it=items.find(x=>x.id===id);if(!it||!newLoc)return;it.history.push({location:it.location,ts:it.ts});it.location=newLoc.trim();it.ts=Date.now();store();render()}
+function edit(id,text){const it=items.find(x=>x.id===id);if(!it||!text)return;Object.assign(it,split(text),{text:text.trim()});store();render()}
+function del(id){const c=ask(window.confirm,'Delete this item?');if(c===false)return;items=items.filter(x=>x.id!==id);store();render()}
+function esc(s){return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
+function render(){const sel=$('place'),cur=sel.value,places=[...new Set(items.map(i=>placeOf(i.location)))].sort();
+ sel.innerHTML='<option value="">All places</option>'+places.map(p=>`<option ${p===cur?'selected':''}>${esc(p)}</option>`).join('');
+ let r=$('q').value.trim()?search($('q').value):items.slice().sort((a,b)=>b.ts-a.ts);if(sel.value)r=r.filter(i=>placeOf(i.location)===sel.value);
+ $('list').innerHTML=r.length?r.slice(0,100).map(i=>`<div class="item" data-id="${i.id}">${i.photo?`<img src="${i.photo}" alt="">`:''}<div><div><b>${esc(i.item)}</b></div><div class="loc">${esc(i.location||'(no location)')}</div><div class="meta">${new Date(i.ts).toLocaleString()}${i.history.length?' · moved '+i.history.length+'×, was: '+esc(i.history[i.history.length-1].location):''}</div><div class="acts"><button class="sec" data-a="move">Moved</button><button class="sec" data-a="edit">Edit</button><button class="sec" data-a="del">Delete</button></div></div></div>`).join(''):'<p class="meta">Nothing found.</p>'}
+$('list').onclick=e=>{const a=e.target.dataset.a;if(!a)return;const id=e.target.closest('.item').dataset.id,it=items.find(x=>x.id===id);
+ if(a==='del')del(id);if(a==='move')move(id,ask(window.prompt,'Where is it now?',it.location));if(a==='edit')edit(id,ask(window.prompt,'Edit entry',it.text))};
+function doSave(){try{const t=$('entry').value;if(!t.trim()){banner('Type or say what you put away first.');return}
+ let it;try{it=add(t,pendingPhoto)}catch(e){it=add(t,null)}
+ if(it){$('entry').value='';pendingPhoto=null;$('prev').style.display='none';try{$('photo').value=''}catch(e){}flash('✅ Saved: '+it.item)}}catch(e){banner('⚠️ Save error: '+e.message)}}
+function flash(m){const f=$('flash');f.textContent=m;f.style.display='block';clearTimeout(flash.t);flash.t=setTimeout(()=>f.style.display='none',2500)}
+$('save').onclick=doSave;$('entry').addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();doSave()}});
+$('q').oninput=render;$('place').onchange=render;
+$('photo').onchange=e=>{try{const f=e.target.files&&e.target.files[0];if(!f)return;const img=new Image();img.onerror=()=>{pendingPhoto=null;banner('Could not read that photo. You can still save without it.')};img.onload=()=>{try{const s=Math.min(1,800/Math.max(img.width,img.height)),c=document.createElement('canvas');c.width=img.width*s;c.height=img.height*s;c.getContext('2d').drawImage(img,0,0,c.width,c.height);pendingPhoto=c.toDataURL('image/jpeg',0.7);$('prev').src=pendingPhoto;$('prev').style.display='block';}catch(x){pendingPhoto=null;banner('Photo could not be shrunk. Save will go through without it.')}try{URL.revokeObjectURL(img.src)}catch(x){}};img.src=URL.createObjectURL(f)}catch(x){pendingPhoto=null;banner('Photo not available. You can still save.')}};
+function mic(target,after){const SR=window.SpeechRecognition||window.webkitSpeechRecognition;const tip='🎤 Voice is not available here. Tap the text box and use the microphone key on your phone keyboard instead.';
+ if(!SR){banner(tip);target.focus();return}
+ try{const r=new SR();r.lang='en-US';r.onresult=e=>{target.value=e.results[0][0].transcript;banner('');after&&after()};r.onerror=e=>{banner(e.error==='not-allowed'?'🎤 Mic permission denied. Allow the microphone for this site, or use the keyboard mic.':tip);target.focus()};r.start();flash('🎤 Listening…')}catch(e){banner(tip);target.focus()}}
+$('micAdd').onclick=()=>mic($('entry'));$('micFind').onclick=()=>mic($('q'),render);
+function exportData(){return JSON.stringify({app:'wdipi',version:1,exported:Date.now(),items})}
+function importData(json){const d=JSON.parse(json),arr=Array.isArray(d)?d:d.items;if(!Array.isArray(arr))throw Error('bad file');const ids=new Set(items.map(i=>i.id));arr.forEach(i=>{if(i&&i.id&&!ids.has(i.id)){i.history=i.history||[];items.push(i)}});store();render();return arr.length}
+$('exp').onclick=()=>{const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([exportData()],{type:'application/json'}));a.download='where-did-i-put-it-'+new Date().toISOString().slice(0,10)+'.json';a.click()};
+$('imp').onchange=e=>{const f=e.target.files[0];if(!f)return;f.text().then(t=>{try{flash('Imported '+importData(t)+' items')}catch(x){banner('Could not read that backup')}})};
+let th=null;try{th=localStorage.getItem('wdipi.theme')}catch(e){}if(th==='dark'||(!th&&window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches))document.body.classList.add('dark');
+$('theme').onclick=()=>{document.body.classList.toggle('dark');try{localStorage.setItem('wdipi.theme',document.body.classList.contains('dark')?'dark':'light')}catch(e){}};
+try{if('serviceWorker'in navigator&&location.protocol==='https:')navigator.serviceWorker.register('sw.js').catch(()=>{})}catch(e){}
+window.app={get items(){return items},get mode(){return mode},exportData,importData,split,search,ready:null};render();window.app.ready=initStorage();
+</script></body></html>
