@@ -1,0 +1,4 @@
+Bundled third-party code (Apache-2.0):
+- TensorFlow.js (vendor/tf.min.js) https://github.com/tensorflow/tfjs
+- COCO-SSD (vendor/coco-ssd.min.js) and SSDLite MobileNet v2 weights (model/ssdlite/) https://github.com/tensorflow/tfjs-models
+All served from this site; nothing is fetched from third parties.
