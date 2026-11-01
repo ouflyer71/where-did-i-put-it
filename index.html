@@ -49,6 +49,7 @@ input.txt{width:100%;font-size:19px;padding:10px;border:2px solid var(--mut);bor
 <div id="vBody" style="min-height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:60px 10px 20px;box-sizing:border-box"><img id="vImg" alt="" style="max-width:100%;max-height:75vh;object-fit:contain;border-radius:8px;touch-action:pinch-zoom"><div id="vInfo" style="margin-top:12px;text-align:center;font-size:18px"></div></div></div>
 <section class="row"><button class="sec" id="exp">⬇ Export backup</button><label class="btn sec" style="color:var(--fg)">⬆ Import<input id="imp" type="file" accept=".json,application/json,text/plain,*/*" hidden></label></section>
 <p class="meta" id="bkLabel" style="margin:-4px 0 8px"></p>
+<p class="meta" style="margin:0 0 8px"><label style="text-decoration:underline;cursor:pointer">🔎 Check a backup file<input id="chk" type="file" accept=".json,.txt,application/json,text/plain,*/*" hidden></label> <span id="chkRes"></span></p>
 <script>
 const KEY='wdipi.items',RKEY='wdipi.recent';let recent=[],items=[],photos=new Map(),pdb=null,pdbFail=false,pendingPhoto=null,mode='memory',idb=null;const mem={};
 const $=id=>document.getElementById(id);
@@ -57,11 +58,11 @@ function lsOK(){try{const t='__t';localStorage.setItem(t,'1');localStorage.remov
 function kvGet(k){if(mode==='local'){try{return localStorage.getItem(k)}catch(e){}}return mem[k]??null}
 function kvSet(k,v){mem[k]=v;if(mode==='local'){try{localStorage.setItem(k,v);return true}catch(e){banner('⚠️ Phone storage is full or blocked. Item saved for this session only. Export a backup!');return false}}
  if(mode==='idb'&&idb){try{const tx=idb.transaction('kv','readwrite');tx.objectStore('kv').put(v,k);tx.onerror=()=>banner('⚠️ Could not write to storage. Export a backup!')}catch(e){banner('⚠️ Storage error. Export a backup!')}}return true}
-function store(){if(bkOn){const b=bkGet();b.changes=(b.changes||0)+1;bkPut(b)}try{kvSet(KEY,JSON.stringify(items))}catch(e){banner('⚠️ Could not save to storage: '+e.message)}}
+function store(){bkCache=null;if(bkOn){const b=bkGet();b.changes=(b.changes||0)+1;bkPut(b)}try{kvSet(KEY,JSON.stringify(items))}catch(e){banner('⚠️ Could not save to storage: '+e.message)}}
 function openIDB(){return new Promise(res=>{try{if(!window.indexedDB)return res(null);const r=indexedDB.open('wdipi',1);r.onupgradeneeded=()=>r.result.createObjectStore('kv');r.onsuccess=()=>res(r.result);r.onerror=()=>res(null);r.onblocked=()=>res(null);setTimeout(()=>res(null),2000)}catch(e){res(null)}})}
 function openPDB(){return new Promise(res=>{try{if(!window.indexedDB)return res(null);const r=indexedDB.open('wdipi-photos',1);r.onupgradeneeded=()=>r.result.createObjectStore('p');r.onsuccess=()=>res(r.result);r.onerror=()=>res(null);r.onblocked=()=>res(null);setTimeout(()=>res(null),2500)}catch(e){res(null)}})}
 function pdbAll(){return new Promise(res=>{try{const st=pdb.transaction('p').objectStore('p'),out=new Map(),c=st.openCursor();c.onsuccess=()=>{const x=c.result;if(x){out.set(x.key,x.value);x.continue()}else res(out)};c.onerror=()=>res(out)}catch(e){res(new Map())}})}
-function putPhoto(id,ph){photos.set(id,ph);if(!pdb){banner('⚠️ Photo storage is blocked here. This photo is kept for this session only. Open the app in Chrome or Safari to keep photos.');return}
+function putPhoto(id,ph){bkCache=null;photos.set(id,ph);if(!pdb){banner('⚠️ Photo storage is blocked here. This photo is kept for this session only. Open the app in Chrome or Safari to keep photos.');return}
  try{const tx=pdb.transaction('p','readwrite');tx.objectStore('p').put(ph,id);tx.onerror=()=>banner('⚠️ Could not store the photo (storage full or blocked). Export a backup!')}catch(e){banner('⚠️ Could not store the photo: '+e.message)}}
 function dropPhoto(id){photos.delete(id);try{pdb&&pdb.transaction('p','readwrite').objectStore('p').delete(id)}catch(e){}}
 function photoOf(i){const p=photos.get(i.id);return p?p.img:null}
@@ -147,7 +148,7 @@ const BKEY='wdipi.backup';let bkOn=false;function bkGet(){try{return JSON.parse(
 function ago(t){const d=Math.floor((Date.now()-t)/864e5);return d<=0?'today':d===1?'yesterday':d+' days ago'}
 function updateBk(){const b=bkGet(),last=b.at?ago(b.at):'never';const lab=$('bkLabel');if(lab)lab.textContent='Last backup: '+last+(b.at&&b.changes?' · '+b.changes+' change'+(b.changes>1?'s':'')+' since':'');const bn=$('bkBanner');if(!bn)return;
  const busy=$('q').value.trim()||$('list').querySelector('input,textarea');const due=b.at?(Date.now()-b.at>=7*864e5||(b.changes||0)>=10):items.length>=3;const show=due&&!busy&&!(b.snooze&&Date.now()<b.snooze);
- bn.style.display=show?'block':'none';if(show)$('bkMsg').textContent='Back up your items? Last backup: '+last+'.'}
+ bn.style.display=show?'block':'none';if(show&&!bkCache){const go=()=>{try{buildBackup()}catch(e){}};window.requestIdleCallback?requestIdleCallback(go,{timeout:1500}):setTimeout(go,300)}if(show)$('bkMsg').textContent='Back up your items? Last backup: '+last+'.'}
 let renderedQ=null;function render(){renderedQ=$('q').value;setTimeout(updateBk,0);const sel=$('place'),cur=sel.value,places=[...new Set(items.map(i=>placeOf(i.location)))].sort();
  sel.innerHTML='<option value="">All places</option>'+places.map(p=>`<option ${p===cur?'selected':''}>${esc(p)}</option>`).join('');
  const tf=$('tagf'),tcur=tf.value;tf.innerHTML='<option value="">All tags</option>'+[...new Set(items.map(i=>i.tag).filter(Boolean))].sort().map(t=>`<option ${t===tcur?'selected':''}>${esc(t)}</option>`).join('');
@@ -188,17 +189,30 @@ function exportData(){const ph={};photos.forEach((v,k)=>{if(items.some(i=>i.id==
 function importData(json){const d=JSON.parse(json),arr=Array.isArray(d)?d:d.items;if(!Array.isArray(arr))throw Error('bad file');const ids=new Set(items.map(i=>i.id));arr.forEach(i=>{if(i&&i.id&&!ids.has(i.id)){i.history=i.history||[];const im=(d.photos&&d.photos[i.id])||i.photo;delete i.photo;if(im)putPhoto(i.id,{img:im});items.push(i)}});renum();store();render();return arr.length}
 function bkName(){const d=new Date();return 'where-did-i-put-it-backup-'+d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')+'.json'}
 function bkDone(){const b=bkGet();b.at=Date.now();b.changes=0;b.snooze=0;bkPut(b);updateBk()}
-async function backupNow(){const json=exportData(),name=bkName();let file=null;try{file=new File([json],name,{type:'application/json'})}catch(e){}
- if(file&&navigator.share&&navigator.canShare){let ok=false;try{ok=navigator.canShare({files:[file]})}catch(e){}
-  if(ok){try{await navigator.share({files:[file],title:'Where Did I Put It backup'});bkDone();flash('✅ Backup saved');return 'shared'}catch(e){if(e&&e.name==='AbortError'){flash('Backup cancelled');return 'cancelled'}}}}
- const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([json],{type:'application/json'}));a.download=name;document.body.appendChild(a);a.click();a.remove();bkDone();flash('✅ Backup downloaded');return 'downloaded'}
+let bkCache=null;
+function buildBackup(){if(bkCache)return bkCache;const ph={};photos.forEach((v,k)=>{if(items.some(i=>i.id===k)&&v&&v.img)ph[k]=v.img});const now=new Date(),n=items.length,pn=Object.keys(ph).length;
+ const obj={_readme:'Where Did I Put It backup',_created:now.toLocaleString('en-US',{dateStyle:'medium',timeStyle:'short'}),_summary:n+' item'+(n===1?'':'s')+', '+pn+' photo'+(pn===1?'':'s')+'. Restore with Import in the app.',
+  app:'wdipi',version:3,exported:now.getTime(),itemCount:n,photoCount:pn,items,photos:ph};
+ const json=JSON.stringify(obj,null,2);const chk=JSON.parse(json);if(!json.length||!Array.isArray(chk.items)||chk.items.length!==n)throw Error('backup check failed');
+ bkCache={json,n,pn,size:new Blob([json]).size};return bkCache}
+const kb=b=>b<1024?b+' B':b<1048576?Math.round(b/1024)+' KB':(b/1048576).toFixed(1)+' MB';
+let bkKeep=[];
+function backupNow(){let B;try{B=buildBackup()}catch(e){banner('⚠️ Could not build backup: '+e.message);return Promise.resolve('error')}
+ const name=bkName(),msg='✅ Backed up '+B.n+' item'+(B.n===1?'':'s')+', '+kb(B.size);let file=null;try{file=new File([B.json],name,{type:'text/plain'})}catch(e){}
+ const dl=()=>{const blob=new Blob([B.json],{type:'application/json'}),u=URL.createObjectURL(blob),a=document.createElement('a');a.href=u;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(u),60000);bkDone();flash(msg);return 'downloaded'};
+ let ok=false;if(file&&file.size>0&&navigator.share&&navigator.canShare){try{ok=navigator.canShare({files:[file]})}catch(e){}}
+ if(!ok)return Promise.resolve(dl());
+ bkKeep.push(file);const pr=navigator.share({files:[file],title:name});
+ return pr.then(()=>{bkDone();flash(msg);return 'shared'},e=>{if(e&&e.name==='AbortError'){flash('Backup cancelled');return 'cancelled'}return dl()}).finally(()=>setTimeout(()=>{bkKeep=bkKeep.filter(f=>f!==file)},60000))}
+function checkBackup(t){const d=JSON.parse(t),arr=Array.isArray(d)?d:d.items;if(!Array.isArray(arr))throw Error('bad');const ph=d.photos?Object.keys(d.photos).length:arr.filter(i=>i&&i.photo).length;return{items:arr.length,photos:ph,date:d.exported?new Date(d.exported).toLocaleString('en-US',{dateStyle:'medium',timeStyle:'short'}):''}}
+$('chk').onchange=e=>{const f=e.target.files[0];if(!f)return;f.text().then(t=>{try{const r=checkBackup(t);$('chkRes').textContent='✅ Good backup: '+r.items+' items, '+r.photos+' photos'+(r.date?', from '+r.date:'')+' ('+kb(f.size)+'). Nothing imported.'}catch(x){$('chkRes').textContent='⚠️ Not a readable backup ('+kb(f.size)+').'}e.target.value=''})};
 $('exp').onclick=()=>backupNow();$('bkNow').onclick=()=>backupNow();$('bkLater').onclick=()=>{const b=bkGet();b.snooze=Date.now()+864e5;bkPut(b);updateBk()};
-$('imp').onchange=e=>{const f=e.target.files[0];if(!f)return;f.text().then(t=>{try{flash('Imported '+importData(t)+' items')}catch(x){banner('Could not read that backup')}})};
+$('imp').onchange=e=>{const f=e.target.files[0];if(!f)return;f.text().then(t=>{try{flash('Imported '+importData(t)+' items')}catch(x){banner('Could not read that backup')}e.target.value=''})};
 let th=null;try{th=localStorage.getItem('wdipi.theme')}catch(e){}if(th==='dark'||(!th&&window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches))document.body.classList.add('dark');
 $('theme').onclick=()=>{document.body.classList.toggle('dark');try{localStorage.setItem('wdipi.theme',document.body.classList.contains('dark')?'dark':'light')}catch(e){}};
 try{if('serviceWorker'in navigator&&location.protocol==='https:'){const had=!!navigator.serviceWorker.controller;let reloaded=false;navigator.serviceWorker.addEventListener('controllerchange',()=>{if(had&&!reloaded){reloaded=true;location.reload()}});
  navigator.serviceWorker.register('sw.js',{updateViaCache:'none'}).then(r=>{r.update().catch(()=>{});document.addEventListener('visibilitychange',()=>{if(!document.hidden)r.update().catch(()=>{})})}).catch(()=>{})}}catch(e){}
-window.app={get items(){return items},get mode(){return mode},exportData,importData,backupNow,bkGet,updateBk,reorder,sim,get photos(){return photos},split,search,ready:null};render();window.app.ready=initStorage().then(r=>{bkOn=true;updateBk();return r});
+window.app={get items(){return items},get mode(){return mode},exportData,importData,backupNow,bkGet,buildBackup,checkBackup,updateBk,reorder,sim,get photos(){return photos},split,search,ready:null};render();window.app.ready=initStorage().then(r=>{bkOn=true;updateBk();return r});
 </script>
-<p class="meta" id="ver" style="text-align:center;margin:16px 0 8px">Where Did I Put It · v15</p>
+<p class="meta" id="ver" style="text-align:center;margin:16px 0 8px">Where Did I Put It · v16</p>
 </body></html>
