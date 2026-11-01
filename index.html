@@ -35,23 +35,7 @@ input.txt{width:100%;font-size:19px;padding:10px;border:2px solid var(--mut);bor
 <div class="row"><label class="btn">🔎 Find by photo<input id="fphoto" type="file" accept="image/*" hidden></label><button class="sec" id="pToggle">🖼 Show photos</button></div>
 <div id="pmatch"></div>
 <div id="pview" style="display:none"><input id="pq" type="search" placeholder="search photos by name, spot or tag"><div class="grid" id="pgrid"></div></div>
-<div class="row"><input id="want" class="txt" placeholder="What are you looking for? e.g. blue water bottle"></div>
-<div class="row"><button id="scanBtn">📹 Live scan</button></div>
 <p class="meta">Photos and tags stay on this phone only. Nothing is uploaded.</p></section>
-<div id="scan" style="display:none;position:fixed;inset:0;background:#000;z-index:20;color:#fff;overflow:auto">
-<div style="position:relative"><video id="vid" playsinline muted autoplay style="width:100%;display:block;max-height:60vh;object-fit:contain;background:#000"></video><canvas id="ovl" style="position:absolute;inset:0;width:100%;height:100%;pointer-events:none"></canvas>
-<div id="scanMsg" style="position:absolute;left:8px;right:8px;top:8px;background:rgba(0,0,0,.65);padding:10px;border-radius:10px;font-weight:700;font-size:20px">Starting camera…</div></div>
-<div style="padding:10px">
-<div id="wantMsg" style="font-size:20px;font-weight:700;margin-bottom:6px"></div>
-<div class="row"><input id="scanItem" class="txt" placeholder="Is my ___ here? (a saved item)"><button class="sec" id="scanItemBtn" style="flex:0">Check</button></div>
-<label style="display:block;margin:8px 0"><input type="checkbox" id="idObj"> Identify objects (downloads an 18 MB on-device model from this site once)</label>
-<div id="objMsg" class="meta" style="color:#ddd"></div>
-<div class="row"><button id="snapBtn">📸 Snap &amp; search</button><button class="sec" id="resumeBtn" style="display:none">▶ Tap to resume camera</button></div>
-<div id="zoomRow" style="display:none;margin:6px 0">🔍 Zoom <input type="range" id="zoom" style="width:70%"></div>
-<p class="meta" id="guide" style="color:#ddd">Tip: hold the phone about 20 cm (8 in) or more away and use Zoom instead of moving closer. iPhone can't focus any nearer. Tap 📸 Snap for a sharp still.</p>
-<div class="row"><input id="spotName" class="txt" placeholder="Name this spot, e.g. garage shelf"><input id="spotTag" class="txt" placeholder="tag, e.g. garage"></div>
-<div class="row"><button id="spotSave">📌 Save this spot</button><button class="sec" id="scanClose">✖ Close camera</button></div>
-<p class="meta" style="color:#ccc">Best guesses only. Spot matching compares the picture with your saved photos. Object finding knows about 80 everyday kinds of things (cup, bottle, phone, scissors, backpack…) plus colours, not your exact item. Everything runs on this phone.</p></div></div>
 <section class="row"><button class="sec" id="exp">⬇ Export backup</button><label class="btn sec" style="color:var(--fg)">⬆ Import<input id="imp" type="file" accept="application/json" hidden></label></section>
 <script>
 const KEY='wdipi.items',RKEY='wdipi.recent';let recent=[],items=[],photos=new Map(),pdb=null,pdbFail=false,pendingPhoto=null,mode='memory',idb=null;const mem={};
@@ -89,75 +73,7 @@ async function findByPhoto(file){$('pmatch').innerHTML='<p class="meta">Comparin
  const r=ids.map(id=>[sim(q.f,photos.get(id).f),items.find(x=>x.id===id)]).sort((a,b)=>b[0]-a[0]).slice(0,3);
  if(!r.length){$('pmatch').innerHTML='<p class="meta">No saved items have photos yet.</p>';return}
   $('pmatch').innerHTML='<p class="meta">Best guess from how the pictures look (colours and shapes), not a sure thing. Check the spot.</p>'+r.map(([s,i])=>`<div class="match" data-id="${i.id}"><img src="${photoOf(i)}" alt=""><div><b>${esc(i.item)}</b>${i.tag?`<span class="tag">${esc(i.tag)}</span>`:''}<div class="loc">${esc(i.location||'(no location)')}</div><div class="meta">${Math.round(s*100)}% match · ${lab(s)}</div></div></div>`).join('')}
-// ---------- live scan ----------
 const lab=s=>s>=.75?'strong':s>=.5?'possible':'weak';
-let scan={stream:null,t:null,busy:false,target:null,model:null,loading:false,dets:[],lastDet:0};
-const COLORS={red:[[345,360],[0,15]],orange:[[15,40]],yellow:[[40,70]],green:[[70,165]],blue:[[190,255]],purple:[[255,290]],pink:[[290,345]]};
-const NEUTRAL={black:1,white:1,gray:1,grey:1,silver:1,brown:1};
-const SYN={phone:'cell phone',cellphone:'cell phone',mobile:'cell phone',remote:'remote',controller:'remote',cup:'cup',mug:'cup',bottle:'bottle',flask:'bottle',laptop:'laptop',computer:'laptop',keyboard:'keyboard',mouse:'mouse',scissors:'scissors',book:'book',backpack:'backpack',bag:'handbag',purse:'handbag',handbag:'handbag',umbrella:'umbrella',knife:'knife',spoon:'spoon',fork:'fork',bowl:'bowl',clock:'clock',vase:'vase',chair:'chair',couch:'couch',tv:'tv',teddy:'teddy bear',toothbrush:'toothbrush',hairdryer:'hair drier',suitcase:'suitcase',luggage:'suitcase',ball:'sports ball',bat:'baseball bat',glove:'baseball glove',racket:'tennis racket',skateboard:'skateboard',bicycle:'bicycle',bike:'bicycle',car:'car',truck:'truck',bus:'bus',motorcycle:'motorcycle',dog:'dog',cat:'cat',bench:'bench',sink:'sink',oven:'oven',microwave:'microwave',toaster:'toaster',refrigerator:'refrigerator',fridge:'refrigerator',wine:'wine glass',glass:'wine glass',banana:'banana',apple:'apple',orange_fruit:'orange',sandwich:'sandwich',pizza:'pizza',donut:'donut',cake:'cake',tie:'tie',kite:'kite',frisbee:'frisbee',skis:'skis',snowboard:'snowboard',surfboard:'surfboard',bed:'bed',table:'dining table',toilet:'toilet',plant:'potted plant',person:'person'};
-function parseWant(t){const w=(t||'').toLowerCase().replace(/[^a-z ]/g,' ').split(/\s+/).filter(Boolean);const col=w.find(x=>COLORS[x]||NEUTRAL[x])||null;const STOP=['a','an','the','my','with','and','of','on','in','some','that','this','is','are','where','find','for','ring','chain','set','bunch'];const cw=w.filter(x=>!COLORS[x]&&!NEUTRAL[x]&&!STOP.includes(x));let obj=null;{const head=cw.length?cw[cw.length-1]:null;/* 'car key'->key, 'key ring with a blue key'->key */const k=head&&(SYN[head]||SYN[head.replace(/s$/,'')]);obj=k||null;if(!k&&cw.length>1&&/^(cup|mug|bottle|bag|phone|remote)$/.test(cw[0]))obj=SYN[cw[0]]}
- const noun=w.filter(x=>x!==col&&!['a','an','the','my','with','and','of','on','in'].includes(x)).pop()||null;return{col,obj,noun,raw:t.trim()}}
-function hueOf(r,g,b){const mx=Math.max(r,g,b),mn=Math.min(r,g,b),d=mx-mn;if(!d)return[0,0,mx/255];let h=mx===r?((g-b)/d)%6:mx===g?(b-r)/d+2:(r-g)/d+4;h*=60;if(h<0)h+=360;return[h,d/mx,mx/255]}
-function isCol(name,r,g,b){const[h,s,v]=hueOf(r,g,b);if(name==='black')return v<.2;if(name==='white')return v>.85&&s<.15;if(name==='gray'||name==='grey'||name==='silver')return s<.12&&v>=.2&&v<=.85;if(name==='brown')return h>=10&&h<45&&s>.35&&v>.15&&v<.6;if(s<.35||v<.2)return false;return COLORS[name].some(([a,b2])=>h>=a&&h<b2)}
-function colorFrac(c,name,box){const g=c.getContext('2d',{willReadFrequently:true});const[x,y,w,h]=box||[0,0,c.width,c.height];if(w<2||h<2)return 0;const d=g.getImageData(Math.max(0,x|0),Math.max(0,y|0),Math.max(1,w|0),Math.max(1,h|0)).data;let n=0,m=0;for(let k=0;k<d.length;k+=16){n++;if(isCol(name,d[k],d[k+1],d[k+2]))m++}return n?m/n:0}
-function bestColorTile(c,name){let best=[0,null];if(colorFrac(c,name)>.25)return best;const N=8,tw=c.width/N,th=c.height/N;for(let y=0;y<N;y++)for(let x=0;x<N;x++){const f=colorFrac(c,name,[x*tw,y*th,tw,th]);if(f>best[0])best=[f,[x*tw,y*th,tw,th]]}return best}
-function frame(){const v=$('vid');if(!v.videoWidth)return null;const s=Math.min(1,480/v.videoWidth),c=scan.cv||(scan.cv=document.createElement('canvas'));c.width=Math.round(v.videoWidth*s);c.height=Math.round(v.videoHeight*s);c.getContext('2d',{willReadFrequently:true}).drawImage(v,0,0,c.width,c.height);return c}
-function drawBox(box,c,label){const o=$('ovl'),v=$('vid'),r=v.getBoundingClientRect();o.width=r.width;o.height=r.height;const g=o.getContext('2d');g.clearRect(0,0,o.width,o.height);if(!box||!c)return;
- const sc=Math.min(r.width/c.width,r.height/c.height),ox=(r.width-c.width*sc)/2,oy=(r.height-c.height*sc)/2;g.strokeStyle='#4fbf78';g.lineWidth=4;g.strokeRect(ox+box[0]*sc,oy+box[1]*sc,box[2]*sc,box[3]*sc);if(label){g.fillStyle='#4fbf78';g.font='bold 16px system-ui';g.fillText(label,ox+box[0]*sc+4,oy+box[1]*sc+18)}}
-function watchGL(){try{const cv=tf.backend().gpgpu.gl.canvas;if(cv.__w)return;cv.__w=1;cv.addEventListener('webglcontextlost',e=>{e.preventDefault();glLost()},{once:true})}catch(e){}}
-async function glLost(){window.app.glLost=(window.app.glLost||0)+1;const m=scan.model;scan.model=null;$('objMsg').textContent='iPhone reset the graphics chip. Reloading the object model…';
- try{m&&m.dispose&&m.dispose()}catch(e){}try{tf.removeBackend('webgl');tf.registerBackend('webgl',()=>new tf.MathBackendWebGL(),2);await tf.setBackend('webgl')}catch(e){await tf.setBackend('cpu')}
- scan.loading=false;await loadModel();window.app.glBackend=tf.getBackend()}
-async function loadModel(){if(scan.model||scan.loading)return;scan.loading=true;$('objMsg').textContent='Loading on-device model (first time ~18 MB)…';const t0=performance.now();
- try{const add=src=>new Promise((res,rej)=>{if(document.querySelector(`script[src="${src}"]`))return res();const e=document.createElement('script');e.src=src;e.onload=res;e.onerror=rej;document.head.appendChild(e)});
-  await add('vendor/tf.min.js');await add('vendor/coco-ssd.min.js');scan.model=await cocoSsd.load({base:'lite_mobilenet_v2',modelUrl:new URL('model/ssdlite/model.json',location.href).href});
-  window.app.modelLoadMs=Math.round(performance.now()-t0);watchGL();$('objMsg').textContent='Object model ready ('+(window.app.modelLoadMs/1000).toFixed(1)+' s).'}catch(e){$('objMsg').textContent='Could not load the object model here: '+e.message;$('idObj').checked=false}scan.loading=false}
-function wantVerdict(c,want,dets,modelOn){let box=null,blabel='';let v='Not seen',why='';
-  if(want.obj&&!modelOn)why=' (turn on Identify objects to look for a '+want.obj+')';
-  const hits=want.obj?dets.filter(d=>d.class===want.obj):[];
-  if(hits.length){const h=hits.sort((a,b)=>b.score-a.score)[0];box=h.bbox;blabel=h.class;const cf=want.col?colorFrac(c,want.col,h.bbox):1;
-   if(!want.col||cf>=.15){v=h.score>=.55?'Found':'Maybe';why=` — ${h.class} ${Math.round(h.score*100)}%`+(want.col?`, ${want.col} ${Math.round(cf*100)}%`:'')}else{v='Maybe';why=` — saw a ${h.class} but it isn't ${want.col}`}}
-  else if(want.col&&!(want.obj&&modelOn)){const[cf,tb]=bestColorTile(c,want.col);if(cf>=.35){v='Maybe';box=tb;blabel=want.col;why=` — a ${want.col} patch, can't confirm it's your ${want.noun||'item'}`+(want.obj?'':' (the model doesn\'t know that object; colour only)')}}
-  else if(!want.obj&&!want.col)why=' — the model doesn\'t know "'+want.raw+'". Try adding a colour, or use Save this spot.';
-  return{v,why,box,blabel}}
-async function snap(){const v=$('vid');if(!v.videoWidth){flash('Camera not ready yet');return}scan.hold=performance.now()+60000;$('wantMsg').textContent='📸 Analysing snapshot…';const t0=performance.now();let src=v,w=v.videoWidth,h=v.videoHeight;
- try{if(window.ImageCapture&&scan.stream){const b=await new ImageCapture(scan.stream.getVideoTracks()[0]).takePhoto();src=await createImageBitmap(b);w=src.width;h=src.height;window.app.snapSrc='ImageCapture'}else window.app.snapSrc='video'}catch(e){window.app.snapSrc='video'}
- const k=Math.min(1,1280/w),c=document.createElement('canvas');c.width=Math.round(w*k);c.height=Math.round(h*k);c.getContext('2d').drawImage(src,0,0,c.width,c.height);window.app.snapSize=c.width+'x'+c.height;
- const want=parseWant($('want').value);if(!want.raw){$('wantMsg').textContent='Type what you are looking for first.';scan.hold=0;return}
- {if(!scan.model){$('idObj').checked=true;await loadModel()}const dets=scan.model?await scan.model.detect(c,20,0.3):[];const W=wantVerdict(c,want,dets,!!scan.model);$('wantMsg').textContent=({Found:'🟢 Found',Maybe:'🟡 Maybe',"Not seen":'⚪ Not seen'})[W.v]+': '+want.raw+W.why;drawBox(W.box,c,W.blabel);window.app.snapLast=W}
- window.app.snapMs=Math.round(performance.now()-t0);scan.hold=performance.now()+4000}
-async function tick(){if(scan.busy||!scan.stream||scan.paused||(scan.hold&&performance.now()<scan.hold))return;scan.busy=true;try{const c=frame();if(!c)return;const f=feat(c);
- // 1) saved spots
- const pool=scan.target?[scan.target]:items.filter(i=>photos.has(i.id)).map(i=>i.id);let best=[0,null];for(const id of pool){const p=await ensureFeat(id);if(p&&p.f){const s=sim(f,p.f);if(s>best[0])best=[s,items.find(x=>x.id===id)]}}
- const it=best[1],pct=Math.round(best[0]*100);let msg;
- if(scan.target){const t=items.find(x=>x.id===scan.target);msg=best[0]>=.5?`✅ Yes, this looks like where your ${t.item} was saved: ${t.location||t.tag} (${pct}%, ${lab(best[0])})`:`❌ This doesn't look like your ${t.item}'s spot (${t.location||t.tag||'?'}) (${pct}%)`}
- else msg=!pool.length?'No saved photos to compare with yet. Use 📌 Save this spot.':best[0]>=.5?`Looks like ${it.tag?it.tag+' · ':''}${it.location||'saved spot'} — ${it.item} (${pct}%, ${lab(best[0])})`:'No match to your saved spots';
- $('scanMsg').textContent=msg;window.app.scanLast={spot:msg,score:best[0],item:it&&it.item};
- // 2) object models (throttled ~1/s)
- const want=parseWant($('want').value);if(want.raw&&want.obj&&!$('idObj').checked&&!scan.loading&&!scan.model&&!scan.autoTried){scan.autoTried=1;$('idObj').checked=true;loadModel()}let box=null,blabel='';
- if($('idObj').checked&&scan.model&&performance.now()-scan.lastDet>900){const t0=performance.now();scan.dets=await scan.model.detect(c,10,0.35);scan.lastDet=performance.now();window.app.detectMs=Math.round(scan.lastDet-t0);
-  $('objMsg').textContent='Sees: '+(scan.dets.length?scan.dets.map(d=>d.class+' '+Math.round(d.score*100)+'%').join(', '):'nothing it knows')+` · ${window.app.detectMs} ms`}
- if(want.raw){const W=wantVerdict(c,want,$('idObj').checked?scan.dets:[],$('idObj').checked);let v=W.v,why=W.why;box=W.box;blabel=W.blabel;
-  $('wantMsg').textContent=({Found:'🟢 Found',Maybe:'🟡 Maybe',"Not seen":'⚪ Not seen'})[v]+': '+want.raw+why;window.app.scanLast.want=v}else $('wantMsg').textContent='';
- drawBox(box,c,blabel)}catch(e){if(/context|webgl/i.test(e.message)&&scan.model)glLost();$('scanMsg').textContent='Scan error: '+e.message}finally{scan.busy=false}}
-async function openScan(){$('scan').style.display='block';$('scanMsg').textContent='Starting camera…';$('wantMsg').textContent='';scan.target=null;
- if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){$('scanMsg').textContent='📵 This browser can\'t use the live camera. Open the app in Chrome or Safari (https).';return}
- try{await acquire();scan.t=setInterval(tick,500);if($('idObj').checked)loadModel()}catch(e){if(e.name==='NeedTap')return;$('scanMsg').textContent=e.name==='NotAllowedError'?'📵 Camera permission was denied. Allow the camera for this site in your browser settings, then try again.':'📵 Camera not available here ('+(e.message||e.name)+'). Allow the camera for this site, or use 📷 Photo and 🔎 Find by photo instead.'}}
-async function acquire(){const st=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'},width:{ideal:1920},height:{ideal:1080}},audio:false});
- scan.stream=st;const v=$('vid');v.srcObject=st;v.muted=true;v.setAttribute('playsinline','');const tr=st.getVideoTracks()[0];window.app.track=tr;
- tr.onended=()=>recoverCam('ended');tr.onmute=()=>setTimeout(()=>{if(tr.muted&&scan.stream&&scan.stream.getVideoTracks()[0]===tr)recoverCam('mute')},1500);
- const cap=tr.getCapabilities?tr.getCapabilities():{};window.app.camCaps=cap;
- try{if(cap.focusMode&&cap.focusMode.includes('continuous'))await tr.applyConstraints({advanced:[{focusMode:'continuous'}]})}catch(e){}
- if(cap.zoom){const z=$('zoom');z.min=cap.zoom.min;z.max=Math.min(cap.zoom.max,10);z.step=cap.zoom.step||0.1;z.value=(tr.getSettings().zoom)||cap.zoom.min;$('zoomRow').style.display='block';z.oninput=()=>tr.applyConstraints({advanced:[{zoom:+z.value}]}).catch(()=>{})}else $('zoomRow').style.display='none';
- try{await v.play();scan.paused=false;$('resumeBtn').style.display='none'}catch(e){needTap();throw Object.assign(new Error('tap'),{name:'NeedTap'})}return st}
-function needTap(){scan.paused=true;$('resumeBtn').style.display='inline-block';$('scanMsg').textContent='⏸ Camera paused. Tap ▶ Tap to resume camera.'}
-function stopCam(){if(scan.stream)scan.stream.getTracks().forEach(t=>{t.onended=t.onmute=null;t.stop()});scan.stream=null}
-async function recoverCam(why){if($('scan').style.display!=='block'||document.hidden)return;window.app.recoveries=(window.app.recoveries||0)+1;window.app.lastRecover=why;stopCam();$('scanMsg').textContent='Reconnecting camera…';
- try{await acquire();if(!scan.t)scan.t=setInterval(tick,500)}catch(e){if(e.name!=='NeedTap')needTap()}}
-document.addEventListener('visibilitychange',()=>{if($('scan').style.display!=='block')return;if(document.hidden){clearInterval(scan.t);scan.t=null;stopCam()}else recoverCam('visible')});
-addEventListener('pagehide',()=>{if($('scan').style.display==='block'){clearInterval(scan.t);scan.t=null;stopCam()}});
-addEventListener('pageshow',e=>{if(e.persisted)recoverCam('pageshow')});
-function closeScan(){scan.paused=false;clearInterval(scan.t);scan.t=null;window.app.lastStream=scan.stream;stopCam();$('resumeBtn').style.display='none';$('vid').srcObject=null;$('scan').style.display='none';render()}
 function tags(){const t=new Set(['garage','shop','kitchen']);items.forEach(i=>i.tag&&t.add(i.tag));return[...t]}
 function chips(box,input){box.innerHTML=tags().map(t=>`<button type="button" class="chip" data-t="${esc(t)}">${esc(t)}</button>`).join('');box.onclick=e=>{const b=e.target.closest('.chip');if(b){input.value=b.dataset.t}}}
 function renderPhotos(){const q=$('pq').value.trim(),ps=items.filter(i=>photos.has(i.id));const r=q?ps.filter(i=>score(i,q)>0):ps;
@@ -221,10 +137,6 @@ $('save').onclick=doSave;$('entry').addEventListener('keydown',e=>{if(e.key==='E
 $('q').oninput=render;$('place').onchange=render;$('tagf').onchange=render;$('pq').oninput=renderPhotos;
 $('pToggle').onclick=()=>{const v=$('pview'),show=v.style.display==='none';v.style.display=show?'block':'none';$('pToggle').textContent=show?'🖼 Hide photos':'🖼 Show photos';if(show)renderPhotos()};
 $('pgrid').onclick=e=>{const c=e.target.closest('.card');if(c)found(c.dataset.id)};$('pmatch').onclick=e=>{const m=e.target.closest('.match');if(m)found(m.dataset.id)};
-$('scanBtn').onclick=openScan;$('snapBtn').onclick=snap;$('resumeBtn').onclick=()=>recoverCam('tap');$('scanClose').onclick=closeScan;$('idObj').onchange=()=>{if($('idObj').checked)loadModel();else{scan.dets=[];$('objMsg').textContent=''}};
-$('scanItemBtn').onclick=()=>{const q=$('scanItem').value.trim();if(!q){scan.target=null;return}const r=search(q).filter(i=>photos.has(i.id));if(r.length){scan.target=r[0].id;$('scanMsg').textContent='Checking for your '+r[0].item+'…'}else{scan.target=null;$('scanMsg').textContent=search(q).length?'That item has no saved photo to compare with.':'No saved item called "'+q+'".'}};
-$('spotSave').onclick=()=>{const c=frame();if(!c){flash('Camera not ready yet');return}const name=$('spotName').value.trim()||($('spotTag').value.trim()?$('spotTag').value.trim()+' spot':'');if(!name){flash('Give this spot a name first');$('spotName').focus();return}
- const ph={img:c.toDataURL('image/jpeg',0.72),f:feat(c)};const it=add(name.includes(',')?name:name+', '+name,ph,$('spotTag').value);if(it){$('spotName').value='';$('spotTag').value='';flash('📌 Saved spot: '+it.item)}};
 $('fphoto').onchange=e=>{const f=e.target.files&&e.target.files[0];if(f)findByPhoto(f);e.target.value=''};
 $('photo').onchange=async e=>{const f=e.target.files&&e.target.files[0];if(!f)return;try{pendingPhoto=await readPhoto(f);$('prev').src=pendingPhoto.img;$('prev').style.display='block'}catch(x){pendingPhoto=null;banner('Could not read that photo. You can still save without it.')}};
 function mic(target,after){const SR=window.SpeechRecognition||window.webkitSpeechRecognition;const tip='🎤 Voice is not available here. Tap the text box and use the microphone key on your phone keyboard instead.';
@@ -239,6 +151,6 @@ $('imp').onchange=e=>{const f=e.target.files[0];if(!f)return;f.text().then(t=>{t
 let th=null;try{th=localStorage.getItem('wdipi.theme')}catch(e){}if(th==='dark'||(!th&&window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches))document.body.classList.add('dark');
 $('theme').onclick=()=>{document.body.classList.toggle('dark');try{localStorage.setItem('wdipi.theme',document.body.classList.contains('dark')?'dark':'light')}catch(e){}};
 try{if('serviceWorker'in navigator&&location.protocol==='https:')navigator.serviceWorker.register('sw.js').catch(()=>{})}catch(e){}
-window.app={get items(){return items},get mode(){return mode},exportData,importData,reorder,sim,get photos(){return photos},split,search,wantVerdict,parseWant,loadModel,get scan(){return scan},ready:null};render();window.app.ready=initStorage();
+window.app={get items(){return items},get mode(){return mode},exportData,importData,reorder,sim,get photos(){return photos},split,search,ready:null};render();window.app.ready=initStorage();
 </script>
 </body></html>
