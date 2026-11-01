@@ -21,6 +21,7 @@ input.txt{width:100%;font-size:19px;padding:10px;border:2px solid var(--mut);bor
 .thumb{padding:0;margin:0;border:0;background:none;min-height:0;cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:rgba(0,0,0,.15);flex:0 0 auto;line-height:0;border-radius:8px}.thumb img{pointer-events:none;min-width:56px;min-height:56px}
 </style></head><body>
 <div id="banner" style="display:none;background:#b3261e;color:#fff;padding:12px;border-radius:10px;font-weight:600"></div><div id="flash" style="display:none;position:fixed;bottom:16px;left:16px;right:16px;background:#1f6f3f;color:#fff;padding:14px;border-radius:10px;text-align:center;z-index:9"></div><h1>📍 Where Did I Put It <button class="sec" id="theme" aria-label="theme">🌓</button></h1>
+<section id="bkBanner" style="display:none;border:1px solid var(--acc,#4a7);"><div id="bkMsg" style="margin-bottom:8px"></div><div class="row"><button id="bkNow">Back up now</button><button id="bkLater" class="sec">Later</button></div></section>
 <section id="recentBox" style="display:none"><b>Recently found</b> <a href="#" id="recentClear" style="float:right;font-size:14px">Clear</a><div id="recent"></div></section>
 <section><b>Put something away</b>
 <label for="what" style="display:block;margin-top:8px;font-weight:700">What are you putting up?</label>
@@ -46,7 +47,8 @@ input.txt{width:100%;font-size:19px;padding:10px;border:2px solid var(--mut);bor
 <div id="viewer" role="dialog" aria-modal="true" aria-label="Photo" style="display:none;position:fixed;inset:0;z-index:30;background:rgba(0,0,0,.92);color:#fff;overflow:auto;touch-action:pinch-zoom pan-x pan-y">
 <button id="vClose" aria-label="Close photo" style="position:fixed;top:max(10px,env(safe-area-inset-top));right:10px;z-index:31;font-size:24px;width:48px;height:48px;border-radius:24px;background:rgba(0,0,0,.6);color:#fff;border:1px solid #888">✕</button>
 <div id="vBody" style="min-height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:60px 10px 20px;box-sizing:border-box"><img id="vImg" alt="" style="max-width:100%;max-height:75vh;object-fit:contain;border-radius:8px;touch-action:pinch-zoom"><div id="vInfo" style="margin-top:12px;text-align:center;font-size:18px"></div></div></div>
-<section class="row"><button class="sec" id="exp">⬇ Export backup</button><label class="btn sec" style="color:var(--fg)">⬆ Import<input id="imp" type="file" accept="application/json" hidden></label></section>
+<section class="row"><button class="sec" id="exp">⬇ Export backup</button><label class="btn sec" style="color:var(--fg)">⬆ Import<input id="imp" type="file" accept=".json,application/json,text/plain,*/*" hidden></label></section>
+<p class="meta" id="bkLabel" style="margin:-4px 0 8px"></p>
 <script>
 const KEY='wdipi.items',RKEY='wdipi.recent';let recent=[],items=[],photos=new Map(),pdb=null,pdbFail=false,pendingPhoto=null,mode='memory',idb=null;const mem={};
 const $=id=>document.getElementById(id);
@@ -55,7 +57,7 @@ function lsOK(){try{const t='__t';localStorage.setItem(t,'1');localStorage.remov
 function kvGet(k){if(mode==='local'){try{return localStorage.getItem(k)}catch(e){}}return mem[k]??null}
 function kvSet(k,v){mem[k]=v;if(mode==='local'){try{localStorage.setItem(k,v);return true}catch(e){banner('⚠️ Phone storage is full or blocked. Item saved for this session only. Export a backup!');return false}}
  if(mode==='idb'&&idb){try{const tx=idb.transaction('kv','readwrite');tx.objectStore('kv').put(v,k);tx.onerror=()=>banner('⚠️ Could not write to storage. Export a backup!')}catch(e){banner('⚠️ Storage error. Export a backup!')}}return true}
-function store(){try{kvSet(KEY,JSON.stringify(items))}catch(e){banner('⚠️ Could not save to storage: '+e.message)}}
+function store(){if(bkOn){const b=bkGet();b.changes=(b.changes||0)+1;bkPut(b)}try{kvSet(KEY,JSON.stringify(items))}catch(e){banner('⚠️ Could not save to storage: '+e.message)}}
 function openIDB(){return new Promise(res=>{try{if(!window.indexedDB)return res(null);const r=indexedDB.open('wdipi',1);r.onupgradeneeded=()=>r.result.createObjectStore('kv');r.onsuccess=()=>res(r.result);r.onerror=()=>res(null);r.onblocked=()=>res(null);setTimeout(()=>res(null),2000)}catch(e){res(null)}})}
 function openPDB(){return new Promise(res=>{try{if(!window.indexedDB)return res(null);const r=indexedDB.open('wdipi-photos',1);r.onupgradeneeded=()=>r.result.createObjectStore('p');r.onsuccess=()=>res(r.result);r.onerror=()=>res(null);r.onblocked=()=>res(null);setTimeout(()=>res(null),2500)}catch(e){res(null)}})}
 function pdbAll(){return new Promise(res=>{try{const st=pdb.transaction('p').objectStore('p'),out=new Map(),c=st.openCursor();c.onsuccess=()=>{const x=c.result;if(x){out.set(x.key,x.value);x.continue()}else res(out)};c.onerror=()=>res(out)}catch(e){res(new Map())}})}
@@ -141,7 +143,12 @@ function renderRecent(){const box=$('recentBox');const r=recent.map(id=>items.fi
  box.style.display=(!r.length||$('q').value.trim()||$('place').value||$('tagf').value)?'none':'block';
  $('recent').innerHTML=r.map(i=>`<div class="ritem" data-id="${i.id}" style="padding:6px 0;cursor:pointer">${photoOf(i)?`<button type="button" class="thumb" data-v="${i.id}" aria-label="View photo of ${esc(i.item)}" style="vertical-align:middle;margin-right:8px"><img src="${photoOf(i)}" alt="Photo of ${esc(i.item)}" style="width:56px;height:56px;object-fit:cover;border-radius:8px;display:block"></button>`:''}<b>${esc(i.item)}</b> — <span class="loc">${esc(i.location||'(no location)')}</span>${putOf(i)?`<div class="meta" style="font-size:13px">${esc(whenLine(i))}</div>`:''}</div>`).join('')}
 function esc(s){return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
-let renderedQ=null;function render(){renderedQ=$('q').value;const sel=$('place'),cur=sel.value,places=[...new Set(items.map(i=>placeOf(i.location)))].sort();
+const BKEY='wdipi.backup';let bkOn=false;function bkGet(){try{return JSON.parse(localStorage.getItem(BKEY)||'{}')||{}}catch(e){return{}}}function bkPut(b){try{localStorage.setItem(BKEY,JSON.stringify(b))}catch(e){}}
+function ago(t){const d=Math.floor((Date.now()-t)/864e5);return d<=0?'today':d===1?'yesterday':d+' days ago'}
+function updateBk(){const b=bkGet(),last=b.at?ago(b.at):'never';const lab=$('bkLabel');if(lab)lab.textContent='Last backup: '+last+(b.at&&b.changes?' · '+b.changes+' change'+(b.changes>1?'s':'')+' since':'');const bn=$('bkBanner');if(!bn)return;
+ const busy=$('q').value.trim()||$('list').querySelector('input,textarea');const due=b.at?(Date.now()-b.at>=7*864e5||(b.changes||0)>=10):items.length>=3;const show=due&&!busy&&!(b.snooze&&Date.now()<b.snooze);
+ bn.style.display=show?'block':'none';if(show)$('bkMsg').textContent='Back up your items? Last backup: '+last+'.'}
+let renderedQ=null;function render(){renderedQ=$('q').value;setTimeout(updateBk,0);const sel=$('place'),cur=sel.value,places=[...new Set(items.map(i=>placeOf(i.location)))].sort();
  sel.innerHTML='<option value="">All places</option>'+places.map(p=>`<option ${p===cur?'selected':''}>${esc(p)}</option>`).join('');
  const tf=$('tagf'),tcur=tf.value;tf.innerHTML='<option value="">All tags</option>'+[...new Set(items.map(i=>i.tag).filter(Boolean))].sort().map(t=>`<option ${t===tcur?'selected':''}>${esc(t)}</option>`).join('');
  const filtered=!!($('q').value.trim()||sel.value||tf.value);let r=$('q').value.trim()?search($('q').value):items.slice();if(sel.value)r=r.filter(i=>placeOf(i.location)===sel.value);if(tf.value)r=r.filter(i=>i.tag===tf.value);if(filtered)editing=null;
@@ -179,13 +186,19 @@ const sink={value:'',focus(){$('what').focus()}};$('micAdd').onclick=()=>mic(sin
 $('recent').onclick=e=>{const r=e.target.closest('.ritem');if(r)found(r.dataset.id)};$('recentClear').onclick=e=>{e.preventDefault();recent=[];storeRecent();renderRecent()};
 function exportData(){const ph={};photos.forEach((v,k)=>{if(items.some(i=>i.id===k))ph[k]=v.img});return JSON.stringify({app:'wdipi',version:2,exported:Date.now(),items,photos:ph})}
 function importData(json){const d=JSON.parse(json),arr=Array.isArray(d)?d:d.items;if(!Array.isArray(arr))throw Error('bad file');const ids=new Set(items.map(i=>i.id));arr.forEach(i=>{if(i&&i.id&&!ids.has(i.id)){i.history=i.history||[];const im=(d.photos&&d.photos[i.id])||i.photo;delete i.photo;if(im)putPhoto(i.id,{img:im});items.push(i)}});renum();store();render();return arr.length}
-$('exp').onclick=()=>{const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([exportData()],{type:'application/json'}));a.download='where-did-i-put-it-'+new Date().toISOString().slice(0,10)+'.json';a.click()};
+function bkName(){const d=new Date();return 'where-did-i-put-it-backup-'+d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')+'.json'}
+function bkDone(){const b=bkGet();b.at=Date.now();b.changes=0;b.snooze=0;bkPut(b);updateBk()}
+async function backupNow(){const json=exportData(),name=bkName();let file=null;try{file=new File([json],name,{type:'application/json'})}catch(e){}
+ if(file&&navigator.share&&navigator.canShare){let ok=false;try{ok=navigator.canShare({files:[file]})}catch(e){}
+  if(ok){try{await navigator.share({files:[file],title:'Where Did I Put It backup'});bkDone();flash('✅ Backup saved');return 'shared'}catch(e){if(e&&e.name==='AbortError'){flash('Backup cancelled');return 'cancelled'}}}}
+ const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([json],{type:'application/json'}));a.download=name;document.body.appendChild(a);a.click();a.remove();bkDone();flash('✅ Backup downloaded');return 'downloaded'}
+$('exp').onclick=()=>backupNow();$('bkNow').onclick=()=>backupNow();$('bkLater').onclick=()=>{const b=bkGet();b.snooze=Date.now()+864e5;bkPut(b);updateBk()};
 $('imp').onchange=e=>{const f=e.target.files[0];if(!f)return;f.text().then(t=>{try{flash('Imported '+importData(t)+' items')}catch(x){banner('Could not read that backup')}})};
 let th=null;try{th=localStorage.getItem('wdipi.theme')}catch(e){}if(th==='dark'||(!th&&window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches))document.body.classList.add('dark');
 $('theme').onclick=()=>{document.body.classList.toggle('dark');try{localStorage.setItem('wdipi.theme',document.body.classList.contains('dark')?'dark':'light')}catch(e){}};
 try{if('serviceWorker'in navigator&&location.protocol==='https:'){const had=!!navigator.serviceWorker.controller;let reloaded=false;navigator.serviceWorker.addEventListener('controllerchange',()=>{if(had&&!reloaded){reloaded=true;location.reload()}});
  navigator.serviceWorker.register('sw.js',{updateViaCache:'none'}).then(r=>{r.update().catch(()=>{});document.addEventListener('visibilitychange',()=>{if(!document.hidden)r.update().catch(()=>{})})}).catch(()=>{})}}catch(e){}
-window.app={get items(){return items},get mode(){return mode},exportData,importData,reorder,sim,get photos(){return photos},split,search,ready:null};render();window.app.ready=initStorage();
+window.app={get items(){return items},get mode(){return mode},exportData,importData,backupNow,bkGet,updateBk,reorder,sim,get photos(){return photos},split,search,ready:null};render();window.app.ready=initStorage().then(r=>{bkOn=true;updateBk();return r});
 </script>
-<p class="meta" id="ver" style="text-align:center;margin:16px 0 8px">Where Did I Put It · v14</p>
+<p class="meta" id="ver" style="text-align:center;margin:16px 0 8px">Where Did I Put It · v15</p>
 </body></html>
