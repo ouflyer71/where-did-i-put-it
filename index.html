@@ -36,7 +36,9 @@ function kvSet(k,v){mem[k]=v;if(mode==='local'){try{localStorage.setItem(k,v);re
 function store(){try{kvSet(KEY,JSON.stringify(items))}catch(e){banner('⚠️ Could not save to storage: '+e.message)}}
 function openIDB(){return new Promise(res=>{try{if(!window.indexedDB)return res(null);const r=indexedDB.open('wdipi',1);r.onupgradeneeded=()=>r.result.createObjectStore('kv');r.onsuccess=()=>res(r.result);r.onerror=()=>res(null);r.onblocked=()=>res(null);setTimeout(()=>res(null),2000)}catch(e){res(null)}})}
 function idbGet(k){return new Promise(res=>{try{const q=idb.transaction('kv').objectStore('kv').get(k);q.onsuccess=()=>res(q.result??null);q.onerror=()=>res(null)}catch(e){res(null)}})}
-function parse(j){try{const a=JSON.parse(j||'[]');return Array.isArray(a)?a:[]}catch(e){return[]}}
+function parse(j){try{const a=JSON.parse(j||'[]');return Array.isArray(a)?norm(a):[]}catch(e){return[]}}
+function norm(a){a.forEach(i=>{i.history=i.history||[]});if(a.some(i=>typeof i.order!=='number')){a.sort((x,y)=>(y.ts||0)-(x.ts||0));a.forEach((i,n)=>i.order=n)}return a.sort((x,y)=>x.order-y.order)}
+function renum(){items.forEach((i,n)=>i.order=n)}
 async function initStorage(){if(lsOK()){mode='local';items=parse(kvGet(KEY))}else{idb=await openIDB();if(idb){mode='idb';const prior=items;items=parse(await idbGet(KEY));prior.forEach(p=>{if(!items.some(i=>i.id===p.id))items.unshift(p)});if(prior.length)store();banner('')}
  else{mode='memory';banner('⚠️ This viewer blocks storage — items will be lost when you close it. Open this page in Chrome or Safari to keep them.')}}render()}
 function ask(fn,...a){try{return fn.apply(window,a)}catch(e){return null}}
@@ -49,21 +51,37 @@ function lev(a,b){const d=[...Array(b.length+1).keys()];for(let i=1;i<=a.length;
 function score(it,q){const qw=words(q);if(!qw.length)return 1;const hw=words([it.item,it.location,it.text].join(' '));let s=0;
  for(const w of qw){let best=0;for(const h of hw){if(h===w)best=Math.max(best,3);else if(h.startsWith(w)||w.startsWith(h)&&h.length>2)best=Math.max(best,2);else if(w.length>3&&lev(w,h)<=1+(w.length>6))best=Math.max(best,1)}s+=best}return s}
 function search(q){return items.map(it=>[score(it,q),it]).filter(x=>x[0]>0).sort((a,b)=>b[0]-a[0]||b[1].ts-a[1].ts).map(x=>x[1])}
-function add(text,photo){if(!text.trim())return null;const p=split(text);const it={id:Date.now().toString(36)+Math.random().toString(36).slice(2,6),...p,text:text.trim(),photo:photo||null,ts:Date.now(),history:[]};items.unshift(it);store();render();return it}
+function add(text,photo){if(!text.trim())return null;const p=split(text);const it={id:Date.now().toString(36)+Math.random().toString(36).slice(2,6),...p,text:text.trim(),photo:photo||null,ts:Date.now(),history:[]};items.unshift(it);renum();store();render();return it}
 function move(id,newLoc){const it=items.find(x=>x.id===id);if(!it||!newLoc)return;it.history.push({location:it.location,ts:it.ts});it.location=newLoc.trim();it.ts=Date.now();store();render()}
 function edit(id,text){const it=items.find(x=>x.id===id);if(!it||!text)return;Object.assign(it,split(text),{text:text.trim()});store();render()}
-function del(id){const c=ask(window.confirm,'Delete this item?');if(c===false)return;items=items.filter(x=>x.id!==id);store();render()}
+let undoBuf=null;
+function del(id){const n=items.findIndex(x=>x.id===id);if(n<0)return;undoBuf={it:items[n],n};items.splice(n,1);renum();store();editing=null;render();flash('🗑 Deleted: '+undoBuf.it.item,{label:'Undo',fn:undo},6000)}
+function undo(){if(!undoBuf)return;items.splice(Math.min(undoBuf.n,items.length),0,undoBuf.it);undoBuf=null;renum();store();render();flash('↩ Restored')}
+function reorder(id,to){const n=items.findIndex(x=>x.id===id);if(n<0)return;to=Math.max(0,Math.min(items.length-1,to));if(to===n)return;const[it]=items.splice(n,1);items.splice(to,0,it);renum();store();render()}
+function saveEdit(id,item,loc){const it=items.find(x=>x.id===id);if(!it||!item.trim())return;item=item.trim();loc=loc.trim();if(loc!==it.location&&it.location){it.history.push({location:it.location,ts:it.ts});it.ts=Date.now()}it.item=item;it.location=loc;it.text=loc?item+', '+loc:item;editing=null;store();render();flash('✅ Updated: '+item)}
+let editing=null;
 function esc(s){return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
 function render(){const sel=$('place'),cur=sel.value,places=[...new Set(items.map(i=>placeOf(i.location)))].sort();
  sel.innerHTML='<option value="">All places</option>'+places.map(p=>`<option ${p===cur?'selected':''}>${esc(p)}</option>`).join('');
- let r=$('q').value.trim()?search($('q').value):items.slice().sort((a,b)=>b.ts-a.ts);if(sel.value)r=r.filter(i=>placeOf(i.location)===sel.value);
- $('list').innerHTML=r.length?r.slice(0,100).map(i=>`<div class="item" data-id="${i.id}">${i.photo?`<img src="${i.photo}" alt="">`:''}<div><div><b>${esc(i.item)}</b></div><div class="loc">${esc(i.location||'(no location)')}</div><div class="meta">${new Date(i.ts).toLocaleString()}${i.history.length?' · moved '+i.history.length+'×, was: '+esc(i.history[i.history.length-1].location):''}</div><div class="acts"><button class="sec" data-a="move">Moved</button><button class="sec" data-a="edit">Edit</button><button class="sec" data-a="del">Delete</button></div></div></div>`).join(''):'<p class="meta">Nothing found.</p>'}
-$('list').onclick=e=>{const a=e.target.dataset.a;if(!a)return;const id=e.target.closest('.item').dataset.id,it=items.find(x=>x.id===id);
- if(a==='del')del(id);if(a==='move')move(id,ask(window.prompt,'Where is it now?',it.location));if(a==='edit')edit(id,ask(window.prompt,'Edit entry',it.text))};
+ const filtered=!!($('q').value.trim()||sel.value);let r=$('q').value.trim()?search($('q').value):items.slice();if(sel.value)r=r.filter(i=>placeOf(i.location)===sel.value);
+ $('list').innerHTML=r.length?r.slice(0,100).map(i=>editing===i.id?`<div class="item" data-id="${i.id}"><div style="flex:1"><input class="e-item" value="${esc(i.item)}" aria-label="item" style="width:100%;margin-bottom:6px"><input class="e-loc" value="${esc(i.location)}" placeholder="location" aria-label="location" style="width:100%"><div class="acts"><button data-a="esave">Save</button><button class="sec" data-a="ecancel">Cancel</button><button class="sec" data-a="del">Delete</button></div></div></div>`:
+ `<div class="item" data-id="${i.id}">${filtered?'':'<span class="grip" title="Drag to reorder" style="touch-action:none;cursor:grab;padding:4px 6px;font-size:22px;user-select:none">⠿</span>'}${i.photo?`<img src="${i.photo}" alt="">`:''}<div style="flex:1" data-a="open"><div data-a="open"><b data-a="open">${esc(i.item)}</b></div><div class="loc" data-a="open">${esc(i.location||'(no location)')}</div><div class="meta">${new Date(i.ts).toLocaleString()}${i.history.length?' · moved '+i.history.length+'×, was: '+esc(i.history[i.history.length-1].location):''}</div><div class="acts"><button class="sec" data-a="edit">Edit</button>${filtered?'':'<button class="sec" data-a="up" aria-label="move up">▲</button><button class="sec" data-a="down" aria-label="move down">▼</button>'}<button class="sec" data-a="del">Delete</button></div></div></div>`).join(''):'<p class="meta">Nothing found.</p>';
+ if(editing){const f=$('list').querySelector('.e-item');if(f&&document.activeElement!==f)f.focus()}}
+$('list').onclick=e=>{const el=e.target.closest('[data-a]');if(!el)return;const a=el.dataset.a,row=el.closest('.item');if(!row)return;const id=row.dataset.id,n=items.findIndex(x=>x.id===id);
+ if(a==='del')del(id);else if(a==='edit'||a==='open'){editing=id;render()}else if(a==='ecancel'){editing=null;render()}
+ else if(a==='esave')saveEdit(id,row.querySelector('.e-item').value,row.querySelector('.e-loc').value);
+ else if(a==='up')reorder(id,n-1);else if(a==='down')reorder(id,n+1)};
+$('list').addEventListener('keydown',e=>{if(e.key==='Enter'&&e.target.matches('.e-item,.e-loc')){const row=e.target.closest('.item');saveEdit(row.dataset.id,row.querySelector('.e-item').value,row.querySelector('.e-loc').value)}if(e.key==='Escape'){editing=null;render()}});
+let drag=null;
+$('list').addEventListener('pointerdown',e=>{const g=e.target.closest('.grip');if(!g)return;e.preventDefault();const row=g.closest('.item');drag={id:row.dataset.id,row,y:e.clientY};row.style.opacity='.6';row.style.position='relative';row.style.zIndex=5;try{g.setPointerCapture(e.pointerId)}catch(x){}});
+$('list').addEventListener('pointermove',e=>{if(!drag)return;drag.row.style.transform=`translateY(${e.clientY-drag.y}px)`});
+function endDrag(e){if(!drag)return;const d=drag;drag=null;d.row.style.transform='';d.row.style.opacity='';const rows=[...$('list').querySelectorAll('.item')].filter(r=>r!==d.row);let to=rows.length;for(let k=0;k<rows.length;k++){const b=rows[k].getBoundingClientRect();if(e.clientY<b.top+b.height/2){to=k;break}}
+ const target=to<rows.length?items.findIndex(x=>x.id===rows[to].dataset.id):items.length;const from=items.findIndex(x=>x.id===d.id);reorder(d.id,target>from?target-1:target);render()}
+$('list').addEventListener('pointerup',endDrag);$('list').addEventListener('pointercancel',e=>{if(drag){drag.row.style.transform='';drag.row.style.opacity='';drag=null}});
 function doSave(){try{const t=$('entry').value;if(!t.trim()){banner('Type or say what you put away first.');return}
  let it;try{it=add(t,pendingPhoto)}catch(e){it=add(t,null)}
  if(it){$('entry').value='';pendingPhoto=null;$('prev').style.display='none';try{$('photo').value=''}catch(e){}flash('✅ Saved: '+it.item)}}catch(e){banner('⚠️ Save error: '+e.message)}}
-function flash(m){const f=$('flash');f.textContent=m;f.style.display='block';clearTimeout(flash.t);flash.t=setTimeout(()=>f.style.display='none',2500)}
+function flash(m,act,ms){const f=$('flash');f.textContent=m;if(act){const b=document.createElement('button');b.id='undo';b.textContent=act.label;b.style.cssText='margin-left:12px;background:#fff;color:#1f6f3f;padding:6px 14px;border-radius:8px;border:0;font-weight:700';b.onclick=()=>{f.style.display='none';act.fn()};f.appendChild(b)}f.style.display='block';clearTimeout(flash.t);flash.t=setTimeout(()=>f.style.display='none',ms||2500)}
 $('save').onclick=doSave;$('entry').addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();doSave()}});
 $('q').oninput=render;$('place').onchange=render;
 $('photo').onchange=e=>{try{const f=e.target.files&&e.target.files[0];if(!f)return;const img=new Image();img.onerror=()=>{pendingPhoto=null;banner('Could not read that photo. You can still save without it.')};img.onload=()=>{try{const s=Math.min(1,800/Math.max(img.width,img.height)),c=document.createElement('canvas');c.width=img.width*s;c.height=img.height*s;c.getContext('2d').drawImage(img,0,0,c.width,c.height);pendingPhoto=c.toDataURL('image/jpeg',0.7);$('prev').src=pendingPhoto;$('prev').style.display='block';}catch(x){pendingPhoto=null;banner('Photo could not be shrunk. Save will go through without it.')}try{URL.revokeObjectURL(img.src)}catch(x){}};img.src=URL.createObjectURL(f)}catch(x){pendingPhoto=null;banner('Photo not available. You can still save.')}};
@@ -72,11 +90,11 @@ function mic(target,after){const SR=window.SpeechRecognition||window.webkitSpeec
  try{const r=new SR();r.lang='en-US';r.onresult=e=>{target.value=e.results[0][0].transcript;banner('');after&&after()};r.onerror=e=>{banner(e.error==='not-allowed'?'🎤 Mic permission denied. Allow the microphone for this site, or use the keyboard mic.':tip);target.focus()};r.start();flash('🎤 Listening…')}catch(e){banner(tip);target.focus()}}
 $('micAdd').onclick=()=>mic($('entry'));$('micFind').onclick=()=>mic($('q'),render);
 function exportData(){return JSON.stringify({app:'wdipi',version:1,exported:Date.now(),items})}
-function importData(json){const d=JSON.parse(json),arr=Array.isArray(d)?d:d.items;if(!Array.isArray(arr))throw Error('bad file');const ids=new Set(items.map(i=>i.id));arr.forEach(i=>{if(i&&i.id&&!ids.has(i.id)){i.history=i.history||[];items.push(i)}});store();render();return arr.length}
+function importData(json){const d=JSON.parse(json),arr=Array.isArray(d)?d:d.items;if(!Array.isArray(arr))throw Error('bad file');const ids=new Set(items.map(i=>i.id));arr.forEach(i=>{if(i&&i.id&&!ids.has(i.id)){i.history=i.history||[];items.push(i)}});renum();store();render();return arr.length}
 $('exp').onclick=()=>{const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([exportData()],{type:'application/json'}));a.download='where-did-i-put-it-'+new Date().toISOString().slice(0,10)+'.json';a.click()};
 $('imp').onchange=e=>{const f=e.target.files[0];if(!f)return;f.text().then(t=>{try{flash('Imported '+importData(t)+' items')}catch(x){banner('Could not read that backup')}})};
 let th=null;try{th=localStorage.getItem('wdipi.theme')}catch(e){}if(th==='dark'||(!th&&window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches))document.body.classList.add('dark');
 $('theme').onclick=()=>{document.body.classList.toggle('dark');try{localStorage.setItem('wdipi.theme',document.body.classList.contains('dark')?'dark':'light')}catch(e){}};
 try{if('serviceWorker'in navigator&&location.protocol==='https:')navigator.serviceWorker.register('sw.js').catch(()=>{})}catch(e){}
-window.app={get items(){return items},get mode(){return mode},exportData,importData,split,search,ready:null};render();window.app.ready=initStorage();
+window.app={get items(){return items},get mode(){return mode},exportData,importData,reorder,split,search,ready:null};render();window.app.ready=initStorage();
 </script></body></html>
