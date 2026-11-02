@@ -69,7 +69,8 @@ function putPhoto(id,ph){bkCache=null;photos.set(id,ph);if(!pdb){banner('⚠️ 
 function dropPhoto(id){photos.delete(id);try{pdb&&pdb.transaction('p','readwrite').objectStore('p').delete(id)}catch(e){}}
 function photoOf(i){const p=photos.get(i.id);return p?p.img:null}
 function loadImg(src){return new Promise((res,rej)=>{const i=new Image();i.onload=()=>res(i);i.onerror=rej;i.src=src})}
-async function readPhoto(file){const u=URL.createObjectURL(file);try{const img=await loadImg(u);const s=Math.min(1,640/Math.max(img.width,img.height)),c=document.createElement('canvas');c.width=Math.round(img.width*s);c.height=Math.round(img.height*s);c.getContext('2d').drawImage(img,0,0,c.width,c.height);return{img:c.toDataURL('image/jpeg',0.72)}}finally{try{URL.revokeObjectURL(u)}catch(e){}}}
+const PMAX=1280,PQ=0.8;
+async function readPhoto(file){const u=URL.createObjectURL(file);try{const img=await loadImg(u);const s=Math.min(1,PMAX/Math.max(img.width,img.height)),c=document.createElement('canvas');c.width=Math.round(img.width*s);c.height=Math.round(img.height*s);c.getContext('2d').drawImage(img,0,0,c.width,c.height);return{img:c.toDataURL('image/jpeg',PQ)}}finally{try{URL.revokeObjectURL(u)}catch(e){}}}
 function tagList(v){const o=[],seen=new Set();String(v||'').split(',').forEach(t=>{t=t.replace(/\s+/g,' ').trim();const k=t.toLowerCase();if(t&&!seen.has(k)){seen.add(k);o.push(t)}});return o}
 const tagNorm=v=>tagList(v).join(', '),hasTag=(i,k)=>tagList(i.tag).some(t=>t.toLowerCase()===k);
 const tagPills=i=>tagList(i.tag).map(t=>`<span class="tag">${esc(t)}</span>`).join('');
@@ -211,7 +212,7 @@ $('bkNow').onclick=()=>backupNow();$('bkTopBtn').onclick=()=>backupNow();$('bkLa
 $('imp').onchange=e=>{const f=e.target.files[0];if(!f)return;f.text().then(t=>{try{flash('Imported '+importData(t)+' items')}catch(x){banner('Could not read that backup')}e.target.value=''})};
 let th=null;try{th=localStorage.getItem('wdipi.theme')}catch(e){}if(th==='dark'||(!th&&window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches))document.body.classList.add('dark');
 $('theme').onclick=()=>{document.body.classList.toggle('dark');try{localStorage.setItem('wdipi.theme',document.body.classList.contains('dark')?'dark':'light')}catch(e){}};
-const APPV='v26';
+const APPV='v27';
 function vnum(v){return parseInt(String(v||'').replace(/\D/g,''))||0}
 async function checkVersion(){try{const r=await fetch('version.json?t='+Date.now(),{cache:'no-store'});if(!r.ok)return;const v=(await r.json()).version;if(vnum(v)>vnum(APPV))showUpdate(v)}catch(e){}}
 function showUpdate(v){if($('upd'))return;const b=document.createElement('button');b.id='upd';b.type='button';b.textContent='🔄 New version available ('+v+') — tap to update';b.style.cssText='display:block;width:100%;margin:0 0 10px;background:#1f6f3f;color:#fff;border:0;border-radius:10px;padding:12px;font-weight:700';b.onclick=hardUpdate;document.body.insertBefore(b,document.body.firstChild)}
@@ -227,6 +228,12 @@ $('where').addEventListener('input',()=>spotChips($('whereChips'),$('where'),'wh
  let seen=false;try{seen=localStorage.getItem('wdipi.a2hsDone')==='1'}catch(e){}
  if(!st&&ios&&safari&&!seen)$('a2hs').style.display='block';
  const done=()=>{$('a2hs').style.display='none';try{localStorage.setItem('wdipi.a2hsDone','1')}catch(e){}};$('a2hsX').onclick=done;$('a2hsOk').onclick=done})();
+
+// v27: one-time background pass; only shrinks photos bigger than the target, original kept on any failure
+async function optimizePhotos(){const st={checked:0,changed:0,before:0,after:0,failed:0};for(const [id,ph] of [...photos]){try{if(!ph||typeof ph.img!=='string'||!ph.img.startsWith('data:image'))continue;st.checked++;const img=await loadImg(ph.img),L=Math.max(img.width,img.height);if(!(L>PMAX||ph.img.length>500000))continue;
+ const s=Math.min(1,PMAX/L),c=document.createElement('canvas');c.width=Math.round(img.width*s);c.height=Math.round(img.height*s);c.getContext('2d').drawImage(img,0,0,c.width,c.height);const n=c.toDataURL('image/jpeg',PQ);
+ if(!n.startsWith('data:image/jpeg')||n.length<1000)throw Error('encode');await loadImg(n);if(n.length<ph.img.length*0.95&&photos.get(id)===ph){st.before+=ph.img.length;st.after+=n.length;putPhoto(id,Object.assign({},ph,{img:n}));st.changed++}}catch(e){st.failed++}await new Promise(r=>setTimeout(r,30))}return st}
+app.optimizePhotos=optimizePhotos;app.ready.then(()=>{let d=null;try{d=localStorage.getItem('wdipi.photoOpt')}catch(e){}if(d==='1')return;setTimeout(()=>optimizePhotos().then(st=>{app.optStats=st;if(!st.failed)try{localStorage.setItem('wdipi.photoOpt','1')}catch(e){}}),3000)});
 </script>
-<p class="meta" id="ver" style="text-align:center;margin:16px 0 8px">Where Did I Put It · v26</p>
+<p class="meta" id="ver" style="text-align:center;margin:16px 0 8px">Where Did I Put It · v27</p>
 </body></html>
