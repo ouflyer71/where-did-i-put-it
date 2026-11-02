@@ -1,5 +1,5 @@
 <!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Where Did I Put It</title><link rel="manifest" href="manifest.json"><meta name="theme-color" content="#1f6f3f">
+<title>Where Did I Put It</title><link rel="manifest" href="manifest.json"><meta name="theme-color" content="#1f6f3f"><link rel="apple-touch-icon" href="icon-180.png"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-title" content="Where Is It"><meta name="apple-mobile-web-app-status-bar-style" content="default">
 <style>
 :root{--bg:#fff;--fg:#111;--card:#f2f2ee;--acc:#1f6f3f;--mut:#555}
 body.dark{--bg:#121412;--fg:#f2f2f2;--card:#22261f;--acc:#4fbf78;--mut:#aaa}
@@ -20,6 +20,7 @@ body.allv .homeonly{display:none!important}body:not(.allv) .allonly{display:none
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px;margin-top:8px}.card{background:var(--bg);border-radius:10px;overflow:hidden;cursor:pointer}.card img{width:100%;height:120px;object-fit:cover;display:block}.card div{padding:4px 6px;font-size:15px}
 .thumb{padding:0;margin:0;border:0;background:none;min-height:0;cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:rgba(0,0,0,.15);flex:0 0 auto;line-height:0;border-radius:8px}.thumb img{pointer-events:none;min-width:56px;min-height:56px}
 </style></head><body>
+<div id="a2hs" style="display:none;background:var(--card);border:2px solid var(--acc);border-radius:12px;padding:12px;margin:8px 0;position:relative"><button type="button" id="a2hsX" aria-label="Dismiss install tip" style="position:absolute;top:4px;right:4px;min-height:40px;min-width:40px;padding:0;background:none;color:var(--fg);font-size:20px">✕</button><b>Install for best results:</b> tap Share <span aria-hidden="true">⬆️</span>, then <b>Add to Home Screen</b>. Keeps your items safer and opens like an app.<div style="margin-top:8px"><button type="button" id="a2hsOk" class="sec" style="min-height:40px;padding:6px 14px;font-size:16px">Got it</button></div></div>
 <div id="banner" style="display:none;background:#b3261e;color:#fff;padding:12px;border-radius:10px;font-weight:600"></div><div id="flash" style="display:none;position:fixed;bottom:16px;left:16px;right:16px;background:#1f6f3f;color:#fff;padding:14px;border-radius:10px;text-align:center;z-index:9"></div><h1>📍 Where Did I Put It <button class="sec" id="theme" aria-label="theme">🌓</button></h1>
 <section id="bkBanner" style="display:none;border:1px solid var(--acc,#4a7);"><div id="bkMsg" style="margin-bottom:8px"></div><div class="row"><button id="bkNow">Back up now</button><button id="bkLater" class="sec">Later</button></div></section>
 <div id="bkStrip" class="homeonly" style="display:flex;align-items:center;gap:10px;margin:0 0 10px"><span id="bkTop" class="meta" style="flex:1;margin:0">Last backup: never</span><button id="bkTopBtn" type="button" style="flex:0 0 auto;width:auto;padding:8px 14px">💾 Back up now</button></div>
@@ -210,7 +211,7 @@ $('bkNow').onclick=()=>backupNow();$('bkTopBtn').onclick=()=>backupNow();$('bkLa
 $('imp').onchange=e=>{const f=e.target.files[0];if(!f)return;f.text().then(t=>{try{flash('Imported '+importData(t)+' items')}catch(x){banner('Could not read that backup')}e.target.value=''})};
 let th=null;try{th=localStorage.getItem('wdipi.theme')}catch(e){}if(th==='dark'||(!th&&window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches))document.body.classList.add('dark');
 $('theme').onclick=()=>{document.body.classList.toggle('dark');try{localStorage.setItem('wdipi.theme',document.body.classList.contains('dark')?'dark':'light')}catch(e){}};
-const APPV='v25';
+const APPV='v26';
 function vnum(v){return parseInt(String(v||'').replace(/\D/g,''))||0}
 async function checkVersion(){try{const r=await fetch('version.json?t='+Date.now(),{cache:'no-store'});if(!r.ok)return;const v=(await r.json()).version;if(vnum(v)>vnum(APPV))showUpdate(v)}catch(e){}}
 function showUpdate(v){if($('upd'))return;const b=document.createElement('button');b.id='upd';b.type='button';b.textContent='🔄 New version available ('+v+') — tap to update';b.style.cssText='display:block;width:100%;margin:0 0 10px;background:#1f6f3f;color:#fff;border:0;border-radius:10px;padding:12px;font-weight:700';b.onclick=hardUpdate;document.body.insertBefore(b,document.body.firstChild)}
@@ -220,6 +221,12 @@ try{if('serviceWorker'in navigator&&location.protocol==='https:'){const had=!!na
  navigator.serviceWorker.register('sw.js',{updateViaCache:'none'}).then(r=>{r.update().catch(()=>{});document.addEventListener('visibilitychange',()=>{if(!document.hidden)r.update().catch(()=>{})})}).catch(()=>{})}}catch(e){}
 window.app={get items(){return items},get mode(){return mode},exportData,importData,checkVersion,hardUpdate,backupNow,bkGet,buildBackup,checkBackup,updateBk,reorder,get photos(){return photos},split,search,ready:null};render();window.app.ready=initStorage().then(r=>{bkOn=true;updateBk();return r});
 $('where').addEventListener('input',()=>spotChips($('whereChips'),$('where'),'where',true));$('tag').addEventListener('input',()=>spotChips($('tagChips'),$('tag'),'tag',true));
+(function(){const st=(navigator.standalone===true)||(window.matchMedia&&matchMedia('(display-mode: standalone)').matches);
+ try{if(navigator.storage&&navigator.storage.persist)navigator.storage.persisted().then(p=>p||navigator.storage.persist()).catch(()=>{})}catch(e){}
+ const ua=navigator.userAgent,ios=/iPhone|iPad|iPod/.test(ua)||(/Macintosh/.test(ua)&&navigator.maxTouchPoints>1),safari=/Safari/.test(ua)&&!/CriOS|FxiOS|EdgiOS|Chrome|Android/.test(ua);
+ let seen=false;try{seen=localStorage.getItem('wdipi.a2hsDone')==='1'}catch(e){}
+ if(!st&&ios&&safari&&!seen)$('a2hs').style.display='block';
+ const done=()=>{$('a2hs').style.display='none';try{localStorage.setItem('wdipi.a2hsDone','1')}catch(e){}};$('a2hsX').onclick=done;$('a2hsOk').onclick=done})();
 </script>
-<p class="meta" id="ver" style="text-align:center;margin:16px 0 8px">Where Did I Put It · v25</p>
+<p class="meta" id="ver" style="text-align:center;margin:16px 0 8px">Where Did I Put It · v26</p>
 </body></html>
