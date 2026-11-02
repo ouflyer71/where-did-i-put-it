@@ -14,7 +14,7 @@ section{background:var(--card);border-radius:14px;padding:12px;margin:12px 0}
 .loc{color:var(--acc);font-weight:700}.meta{color:var(--mut);font-size:15px}.item .acts button{min-height:44px;font-size:16px;padding:6px 10px;margin:4px 4px 0 0}
 #prev{max-width:120px;display:none;border-radius:8px}
 input.txt{width:100%;font-size:19px;padding:10px;border:2px solid var(--mut);border-radius:10px;background:var(--bg);color:var(--fg)}
-body.allv .homeonly{display:none!important}body:not(.allv) .allonly{display:none!important}#allHead{display:flex}
+body.allv .homeonly{display:none!important}body.srch #saveSec,body.srch #recentBox,body.srch #cardsSec,body.srch #stale,body.srch #a2hs{display:none!important}body:not(.allv) .allonly{display:none!important}#allHead{display:flex}
 .chips{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0}.chip{min-height:36px!important;font-size:15px!important;padding:4px 12px!important;border-radius:18px!important;background:var(--bg)!important;color:var(--fg)!important;border:2px solid var(--mut)!important}
 .tag{display:inline-block;font-size:13px;background:var(--acc);color:#fff;border-radius:10px;padding:1px 8px;margin-left:6px}
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px;margin-top:8px}.card{background:var(--bg);border-radius:10px;overflow:hidden;cursor:pointer}.card img{width:100%;height:120px;object-fit:cover;display:block}.card div{padding:4px 6px;font-size:15px}
@@ -26,7 +26,7 @@ body.allv .homeonly{display:none!important}body:not(.allv) .allonly{display:none
 <div class="row"><input id="q" type="search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" enterkeyhint="search" placeholder="where's the tractor fuse?"><button id="micFind" class="sec" style="flex:0" aria-label="Ask where something is">🎤</button></div><div id="voiceAns" role="status" aria-live="polite" style="display:none;font-weight:700;font-size:18px;margin:8px 0;padding:10px 12px;border-radius:10px;background:var(--acc);color:#fff"></div>
 <div class="row allonly" id="filtRow"><select id="place"><option value="">All places</option></select><select id="tagf"><option value="">All tags</option></select></div><div class="allonly" id="spotRow" style="margin:6px 0 10px"></div>
 </section>
-<section class="homeonly"><b>Put something away</b>
+<section class="homeonly" id="saveSec"><b>Put something away</b>
 <label for="what" style="display:block;margin-top:8px;font-weight:700">What are you putting up?</label>
 <div class="row"><input id="what" class="txt" enterkeyhint="next" autocomplete="off" placeholder="e.g. spare tractor fuse"><button id="micWhat" class="sec" aria-label="Speak what" style="flex:0">🎤</button></div>
 <div id="whatErr" class="meta" style="display:none;color:#d9534f;font-weight:700">Tell me what you're putting up.</div>
@@ -151,7 +151,7 @@ function ago(t){const d=Math.floor((Date.now()-t)/864e5);return d<=0?'today':d==
 function updateBk(){const b=bkGet(),last=b.at?ago(b.at):'never';const lab=$('bkLabel');const tp=$('bkTop');if(tp)tp.textContent='Last backup: '+last+(b.at&&b.changes?' · '+b.changes+' new change'+(b.changes>1?'s':''):'');if(lab)lab.textContent='Last backup: '+last+(b.at&&b.changes?' · '+b.changes+' change'+(b.changes>1?'s':'')+' since':'');const bn=$('bkBanner');if(!bn)return;
  const busy=$('q').value.trim()||$('list').querySelector('input,textarea');const due=b.at?(Date.now()-b.at>=7*864e5||(b.changes||0)>=10):items.length>=3;const sc=$('stale');const show=due&&!busy&&!(b.snooze&&Date.now()<b.snooze)&&!(sc&&sc.style.display==='block');
  bn.style.display=show?'block':'none';if(show&&!bkCache){const go=()=>{try{buildBackup()}catch(e){}};window.requestIdleCallback?requestIdleCallback(go,{timeout:1500}):setTimeout(go,300)}if(show)$('bkMsg').textContent='Back up your items? Last backup: '+last+'.'}
-let renderedQ=null;function render(){if(items.length&&typeof wMaybe==='function'&&$('welcome'))try{wMaybe()}catch(_){}renderedQ=$('q').value;setTimeout(updateBk,0);const sel=$('place'),cur=sel.value,places=[...new Set(items.map(i=>placeOf(i.location)))].sort();
+let renderedQ=null;function render(){document.body.classList.toggle('srch',!allView&&!!$('q').value.trim());if(items.length&&typeof wMaybe==='function'&&$('welcome'))try{wMaybe()}catch(_){}renderedQ=$('q').value;setTimeout(updateBk,0);const sel=$('place'),cur=sel.value,places=[...new Set(items.map(i=>placeOf(i.location)))].sort();
  sel.innerHTML='<option value="">All places</option>'+places.map(p=>`<option ${p===cur?'selected':''}>${esc(p)}</option>`).join('');
  const tf=$('tagf'),tcur=tf.value;tf.innerHTML='<option value="">All tags</option>'+(()=>{const m=new Map();items.forEach(i=>tagList(i.tag).forEach(t=>{const k=t.toLowerCase(),o=m.get(k)||new Map();o.set(t,(o.get(t)||0)+1);m.set(k,o)}));return[...m.entries()].map(([k,o])=>[k,[...o.entries()].sort((a,b)=>b[1]-a[1])[0][0]]).sort((a,b)=>a[0].localeCompare(b[0]))})().map(([k,t])=>`<option value="${esc(k)}" ${k===tcur.toLowerCase()?'selected':''}>${esc(t)}</option>`).join('');
  const filtered=!!($('q').value.trim()||sel.value||tf.value||loanF);let r=$('q').value.trim()?search($('q').value):items.slice();if(sel.value)r=r.filter(i=>placeOf(i.location)===sel.value);if(tf.value)r=r.filter(i=>hasTag(i,tf.value.toLowerCase()));if(loanF)r=r.filter(i=>i.loan);if(filtered)editing=null;const homeV=!allView&&!filtered;if(homeV)r=items.slice().sort((a,b)=>(b.ts||0)-(a.ts||0)).slice(0,5);$('seeAll').textContent='See all items ('+items.length+')';$('seeAll').style.display=(!allView&&!filtered&&items.length)?'':'none';
@@ -228,7 +228,7 @@ function applyTheme(){const d=thMode==='dark'||(thMode!=='light'&&thMq&&thMq.mat
 function setTheme(m){thMode=m;try{m==='auto'?localStorage.removeItem('wdipi.theme'):localStorage.setItem('wdipi.theme',m)}catch(e){}applyTheme()}
 if(thMq){thMq.addEventListener?thMq.addEventListener('change',applyTheme):thMq.addListener&&thMq.addListener(applyTheme)}applyTheme();
 $('theme').onclick=()=>setTheme(document.body.classList.contains('dark')?'light':'dark');
-const APPV='v38';
+const APPV='v39';
 function vnum(v){return parseInt(String(v||'').replace(/\D/g,''))||0}
 async function checkVersion(){try{const r=await fetch('version.json?t='+Date.now(),{cache:'no-store'});if(!r.ok)return;const v=(await r.json()).version;if(vnum(v)>vnum(APPV))showUpdate(v)}catch(e){}}
 function showUpdate(v){if($('upd'))return;const b=document.createElement('button');b.id='upd';b.type='button';b.textContent='🔄 New version available ('+v+') — tap to update';b.style.cssText='display:block;width:100%;margin:0 0 10px;background:#1f6f3f;color:#fff;border:0;border-radius:10px;padding:12px;font-weight:700';b.onclick=hardUpdate;document.body.insertBefore(b,document.body.firstChild)}
