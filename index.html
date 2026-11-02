@@ -1,8 +1,8 @@
 <!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Where Did I Put It</title><link rel="manifest" href="manifest.json"><meta name="theme-color" content="#1f6f3f"><link rel="apple-touch-icon" href="icon-180.png"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-title" content="Where Is It"><meta name="apple-mobile-web-app-status-bar-style" content="default">
+<title>Where Did I Put It</title><link rel="manifest" href="manifest.json"><meta name="theme-color" id="tcL" media="(prefers-color-scheme: light)" content="#1f6f3f"><meta name="theme-color" id="tcD" media="(prefers-color-scheme: dark)" content="#121412"><link rel="apple-touch-icon" href="icon-180.png"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-title" content="Where Is It"><meta name="apple-mobile-web-app-status-bar-style" content="default">
 <style>
 :root{--bg:#fff;--fg:#111;--card:#f2f2ee;--acc:#1f6f3f;--mut:#555}
-body.dark{--bg:#121412;--fg:#f2f2f2;--card:#22261f;--acc:#4fbf78;--mut:#aaa}
+body.dark{--bg:#121412;--fg:#f2f2f2;--card:#22261f;--acc:#2a7d4f;--mut:#aaa;color-scheme:dark}body.dark .loc{color:#6fd394}body.dark #whatErr,body.dark #whereErr,body.dark .delask{color:#ff8a80!important}body.dark .delyes{background:#b3261e!important}body.dark #thRow button[aria-pressed=true]{outline:3px solid #6fd394}#thRow button[aria-pressed=true]{outline:3px solid #1f6f3f}
 *{box-sizing:border-box}body{margin:0;font:19px/1.4 system-ui,sans-serif;background:var(--bg);color:var(--fg);padding:12px;max-width:700px;margin:auto}
 h1{font-size:24px;margin:6px 0;display:flex;justify-content:space-between;align-items:center}
 textarea,input[type=search],select{width:100%;font-size:20px;padding:12px;border:2px solid var(--mut);border-radius:10px;background:var(--bg);color:var(--fg)}
@@ -218,9 +218,12 @@ function checkBackup(t){const d=JSON.parse(t),arr=Array.isArray(d)?d:d.items;if(
 $('chk').onchange=e=>{const f=e.target.files[0];if(!f)return;f.text().then(t=>{try{const r=checkBackup(t);$('chkRes').textContent='✅ Good backup: '+r.items+' items, '+r.photos+' photos'+(r.date?', from '+r.date:'')+' ('+kb(f.size)+'). Nothing imported.'}catch(x){$('chkRes').textContent='⚠️ Not a readable backup ('+kb(f.size)+').'}e.target.value=''})};
 $('bkNow').onclick=()=>backupNow();$('bkTopBtn').onclick=()=>backupNow();$('bkLater').onclick=()=>{const b=bkGet();b.snooze=Date.now()+864e5;bkPut(b);updateBk()};
 $('imp').onchange=e=>{const f=e.target.files[0];if(!f)return;f.text().then(t=>{try{flash('Imported '+importData(t)+' items')}catch(x){banner('Could not read that backup')}e.target.value=''})};
-let th=null;try{th=localStorage.getItem('wdipi.theme')}catch(e){}if(th==='dark'||(!th&&window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches))document.body.classList.add('dark');
-$('theme').onclick=()=>{document.body.classList.toggle('dark');try{localStorage.setItem('wdipi.theme',document.body.classList.contains('dark')?'dark':'light')}catch(e){}};
-const APPV='v32';
+var thMode='auto';try{thMode=localStorage.getItem('wdipi.theme')||'auto'}catch(e){}const thMq=window.matchMedia?matchMedia('(prefers-color-scheme: dark)'):null;
+function applyTheme(){const d=thMode==='dark'||(thMode!=='light'&&thMq&&thMq.matches);document.body.classList.toggle('dark',!!d);const l=$('tcL'),k=$('tcD');if(l&&k){if(thMode==='auto'){l.content='#1f6f3f';k.content='#121412'}else{l.content=k.content=d?'#121412':'#1f6f3f'}}document.querySelectorAll('#thRow [data-th]').forEach(x=>x.setAttribute('aria-pressed',x.dataset.th===thMode))}
+function setTheme(m){thMode=m;try{m==='auto'?localStorage.removeItem('wdipi.theme'):localStorage.setItem('wdipi.theme',m)}catch(e){}applyTheme()}
+if(thMq){thMq.addEventListener?thMq.addEventListener('change',applyTheme):thMq.addListener&&thMq.addListener(applyTheme)}applyTheme();
+$('theme').onclick=()=>setTheme(document.body.classList.contains('dark')?'light':'dark');
+const APPV='v33';
 function vnum(v){return parseInt(String(v||'').replace(/\D/g,''))||0}
 async function checkVersion(){try{const r=await fetch('version.json?t='+Date.now(),{cache:'no-store'});if(!r.ok)return;const v=(await r.json()).version;if(vnum(v)>vnum(APPV))showUpdate(v)}catch(e){}}
 function showUpdate(v){if($('upd'))return;const b=document.createElement('button');b.id='upd';b.type='button';b.textContent='🔄 New version available ('+v+') — tap to update';b.style.cssText='display:block;width:100%;margin:0 0 10px;background:#1f6f3f;color:#fff;border:0;border-radius:10px;padding:12px;font-weight:700';b.onclick=hardUpdate;document.body.insertBefore(b,document.body.firstChild)}
@@ -297,6 +300,7 @@ function loanCardClick(a){const id=staleId;staleDone=true;$('stale').style.displ
 function renderLoanRow(){const b=$('loanRow');if(!b)return;const n=items.filter(i=>i.loan).length;b.style.display=n&&!allView?'':'none';b.textContent='🤝 Loaned out ('+n+')'}
 $('loanRow').onclick=()=>{showAll(true);loanF=true;render();scrollTo(0,0)};
 render();
+
 </script>
-<p class="meta" id="ver" style="text-align:center;margin:16px 0 8px">Where Did I Put It · v32</p>
+<div id="thRow" class="meta" style="text-align:center;margin:16px 0 0">Theme: <button type="button" class="sec" data-th="auto" style="min-height:40px;padding:4px 12px;font-size:15px">Auto</button> <button type="button" class="sec" data-th="light" style="min-height:40px;padding:4px 12px;font-size:15px">Light</button> <button type="button" class="sec" data-th="dark" style="min-height:40px;padding:4px 12px;font-size:15px">Dark</button></div><script>document.querySelectorAll('#thRow [data-th]').forEach(b=>b.onclick=()=>setTheme(b.dataset.th));applyTheme();</script><p class="meta" id="ver" style="text-align:center;margin:16px 0 8px">Where Did I Put It · v33</p>
 </body></html>
