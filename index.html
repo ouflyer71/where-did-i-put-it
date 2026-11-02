@@ -39,7 +39,7 @@ body.allv .homeonly{display:none!important}body:not(.allv) .allonly{display:none
 <img id="prev" alt="">
 </section>
 <section><div id="allHead" class="allonly" style="align-items:center;gap:10px;margin-bottom:8px"><button type="button" id="allBack" class="sec" style="flex:0 0 auto;width:auto">← Back</button><b style="font-size:1.2em">All items</b></div><b class="homeonly">Find it</b>
-<div class="row"><input id="q" type="search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" enterkeyhint="search" placeholder="where's the tractor fuse?"><button id="micFind" class="sec" style="flex:0">🎤</button></div>
+<div class="row"><input id="q" type="search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" enterkeyhint="search" placeholder="where's the tractor fuse?"><button id="micFind" class="sec" style="flex:0" aria-label="Ask where something is">🎤</button></div><div id="voiceAns" role="status" aria-live="polite" style="display:none;font-weight:700;font-size:18px;margin:8px 0;padding:10px 12px;border-radius:10px;background:var(--acc);color:#fff"></div>
 <div class="row allonly" id="filtRow"><select id="place"><option value="">All places</option></select><select id="tagf"><option value="">All tags</option></select></div>
 <div id="list"></div><button type="button" id="seeAll" class="sec homeonly" style="margin-top:10px">See all items</button></section>
 <section id="photoSec" class="homeonly"><b>📷 Photos</b>
@@ -185,7 +185,15 @@ $('photo').onchange=async e=>{const f=e.target.files&&e.target.files[0];if(!f)re
 function mic(target,after){const SR=window.SpeechRecognition||window.webkitSpeechRecognition;const tip='🎤 Voice is not available here. Tap the text box and use the microphone key on your phone keyboard instead.';
  if(!SR){banner(tip);target.focus();return}
  try{const r=new SR();r.lang='en-US';r.onresult=e=>{target.value=e.results[0][0].transcript;banner('');after&&after()};r.onerror=e=>{banner(e.error==='not-allowed'?'🎤 Mic permission denied. Allow the microphone for this site, or use the keyboard mic.':tip);target.focus()};r.start();flash('🎤 Listening…')}catch(e){banner(tip);target.focus()}}
-const sink={value:'',focus(){$('what').focus()}};$('micAdd').onclick=()=>mic(sink,()=>{const p=split(sink.value);$('what').value=p.item||'';$('where').value=p.location||'';if(!p.location){$('where').focus();flash('Got “'+p.item+'”. Now say or type where.')}else flash('Check the two fields, then tap Save.')});$('micWhat').onclick=()=>mic($('what'),()=>$('where').focus());$('micWhere').onclick=()=>mic($('where'));$('micFind').onclick=()=>mic($('q'),()=>{render();const t=$('list').querySelector('.item');if(t)found(t.dataset.id)});
+const sink={value:'',focus(){$('what').focus()}};$('micAdd').onclick=()=>mic(sink,()=>{const p=split(sink.value);$('what').value=p.item||'';$('where').value=p.location||'';if(!p.location){$('where').focus();flash('Got “'+p.item+'”. Now say or type where.')}else flash('Check the two fields, then tap Save.')});$('micWhat').onclick=()=>mic($('what'),()=>$('where').focus());$('micWhere').onclick=()=>mic($('where'));$('micFind').onclick=()=>mic($('q'),voiceFind);
+// v28: "Where's my…?" voice search
+function voiceStrip(t){return String(t||'').replace(/[?.!]+\s*$/,'').replace(/^\s*(hey\s+)?(where\s+did\s+i\s+(put|leave)|where\s*(is|are|'s|’s|s)|where\s+i\s+put)\s+(my|the|our)?\s*/i,'').trim()}
+function sayLoc(it){const w=String(it.item||'').trim(),loc=String(it.location||'').trim(),pl=/[^s]s$/i.test(w)&&!/(ss|us|is)$/i.test(w);const l=/^(in|on|under|at|behind|inside|by|next|above|below|beside|near|over|up|down|out|with|between|on top)\b/i.test(loc)?loc:'in '+(/^(the|my|a|an|our|his|her)\b/i.test(loc)?loc:'the '+loc);return 'Your '+w+(pl?' are ':' is ')+l+'.'}
+function voiceFind(){const q=voiceStrip($('q').value);$('q').value=q;render();const qn=toks(q).filter(w=>w.length>=3).length;const r=items.map(it=>[score(it,q),it]).filter(x=>x[0]>0).sort((a,b)=>b[0]-a[0]||b[1].ts-a[1].ts);const a=$('voiceAns');
+ if(!q||!r.length){a.style.display='none';return}const [s1,top]=r[0],s2=r[1]?r[1][0]:0;const conf=s1>=900?s2<900:(s1>=30*Math.max(1,qn)&&s1>s2);
+ if(!conf){a.style.display='none';flash(r.length+' possible match'+(r.length===1?'':'es')+' below.');return}
+ const msg=sayLoc(top);found(top.id);a.textContent='🔊 '+msg;a.style.display='block';try{if(window.speechSynthesis&&window.SpeechSynthesisUtterance){speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(msg);u.lang='en-US';speechSynthesis.speak(u)}}catch(e){}}
+$('q').addEventListener('input',()=>{const a=$('voiceAns');if(a)a.style.display='none'});
 $('recent').onclick=e=>{const r=e.target.closest('.ritem');if(r)found(r.dataset.id)};$('recentClear').onclick=e=>{e.preventDefault();recent=[];storeRecent();renderRecent()};
 function exportData(){const ph={};photos.forEach((v,k)=>{if(items.some(i=>i.id===k))ph[k]=v.img});return JSON.stringify({app:'wdipi',version:2,exported:Date.now(),items,photos:ph})}
 function importData(json){const d=JSON.parse(json),arr=Array.isArray(d)?d:d.items;if(!Array.isArray(arr))throw Error('bad file');const ids=new Set(items.map(i=>i.id));arr.forEach(i=>{if(i&&i.id&&!ids.has(i.id)){i.history=i.history||[];const im=(d.photos&&d.photos[i.id])||i.photo;delete i.photo;if(im)putPhoto(i.id,{img:im});items.push(i)}});renum();store();render();return arr.length}
@@ -212,7 +220,7 @@ $('bkNow').onclick=()=>backupNow();$('bkTopBtn').onclick=()=>backupNow();$('bkLa
 $('imp').onchange=e=>{const f=e.target.files[0];if(!f)return;f.text().then(t=>{try{flash('Imported '+importData(t)+' items')}catch(x){banner('Could not read that backup')}e.target.value=''})};
 let th=null;try{th=localStorage.getItem('wdipi.theme')}catch(e){}if(th==='dark'||(!th&&window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches))document.body.classList.add('dark');
 $('theme').onclick=()=>{document.body.classList.toggle('dark');try{localStorage.setItem('wdipi.theme',document.body.classList.contains('dark')?'dark':'light')}catch(e){}};
-const APPV='v27';
+const APPV='v28';
 function vnum(v){return parseInt(String(v||'').replace(/\D/g,''))||0}
 async function checkVersion(){try{const r=await fetch('version.json?t='+Date.now(),{cache:'no-store'});if(!r.ok)return;const v=(await r.json()).version;if(vnum(v)>vnum(APPV))showUpdate(v)}catch(e){}}
 function showUpdate(v){if($('upd'))return;const b=document.createElement('button');b.id='upd';b.type='button';b.textContent='🔄 New version available ('+v+') — tap to update';b.style.cssText='display:block;width:100%;margin:0 0 10px;background:#1f6f3f;color:#fff;border:0;border-radius:10px;padding:12px;font-weight:700';b.onclick=hardUpdate;document.body.insertBefore(b,document.body.firstChild)}
@@ -235,5 +243,5 @@ async function optimizePhotos(){const st={checked:0,changed:0,before:0,after:0,f
  if(!n.startsWith('data:image/jpeg')||n.length<1000)throw Error('encode');await loadImg(n);if(n.length<ph.img.length*0.95&&photos.get(id)===ph){st.before+=ph.img.length;st.after+=n.length;putPhoto(id,Object.assign({},ph,{img:n}));st.changed++}}catch(e){st.failed++}await new Promise(r=>setTimeout(r,30))}return st}
 app.optimizePhotos=optimizePhotos;app.ready.then(()=>{let d=null;try{d=localStorage.getItem('wdipi.photoOpt')}catch(e){}if(d==='1')return;setTimeout(()=>optimizePhotos().then(st=>{app.optStats=st;if(!st.failed)try{localStorage.setItem('wdipi.photoOpt','1')}catch(e){}}),3000)});
 </script>
-<p class="meta" id="ver" style="text-align:center;margin:16px 0 8px">Where Did I Put It · v27</p>
+<p class="meta" id="ver" style="text-align:center;margin:16px 0 8px">Where Did I Put It · v28</p>
 </body></html>
