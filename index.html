@@ -17,7 +17,6 @@ input.txt{width:100%;font-size:19px;padding:10px;border:2px solid var(--mut);bor
 .chips{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0}.chip{min-height:36px!important;font-size:15px!important;padding:4px 12px!important;border-radius:18px!important;background:var(--bg)!important;color:var(--fg)!important;border:2px solid var(--mut)!important}
 .tag{display:inline-block;font-size:13px;background:var(--acc);color:#fff;border-radius:10px;padding:1px 8px;margin-left:6px}
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px;margin-top:8px}.card{background:var(--bg);border-radius:10px;overflow:hidden;cursor:pointer}.card img{width:100%;height:120px;object-fit:cover;display:block}.card div{padding:4px 6px;font-size:15px}
-.match{display:flex;gap:10px;align-items:center;padding:8px 0;border-top:1px solid var(--mut);cursor:pointer}.match img{width:72px;height:72px;object-fit:cover;border-radius:8px}
 .thumb{padding:0;margin:0;border:0;background:none;min-height:0;cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:rgba(0,0,0,.15);flex:0 0 auto;line-height:0;border-radius:8px}.thumb img{pointer-events:none;min-width:56px;min-height:56px}
 </style></head><body>
 <div id="banner" style="display:none;background:#b3261e;color:#fff;padding:12px;border-radius:10px;font-weight:600"></div><div id="flash" style="display:none;position:fixed;bottom:16px;left:16px;right:16px;background:#1f6f3f;color:#fff;padding:14px;border-radius:10px;text-align:center;z-index:9"></div><h1>📍 Where Did I Put It <button class="sec" id="theme" aria-label="theme">🌓</button></h1>
@@ -41,8 +40,7 @@ input.txt{width:100%;font-size:19px;padding:10px;border:2px solid var(--mut);bor
 <div class="row"><select id="place"><option value="">All places</option></select><select id="tagf"><option value="">All tags</option></select></div>
 <div id="list"></div></section>
 <section id="photoSec"><b>📷 Photos</b>
-<div class="row"><label class="btn">🔎 Find by photo<input id="fphoto" type="file" accept="image/*" hidden></label><button class="sec" id="pToggle">🖼 Show photos</button></div>
-<div id="pmatch"></div>
+<div class="row"><button class="sec" id="pToggle">🖼 Show photos</button></div>
 <div id="pview" style="display:none"><input id="pq" type="search" placeholder="search photos by name, spot or tag"><div class="grid" id="pgrid"></div></div>
 <p class="meta">Photos and tags stay on this phone only. Nothing is uploaded.</p></section>
 <div id="viewer" role="dialog" aria-modal="true" aria-label="Photo" style="display:none;position:fixed;inset:0;z-index:30;background:rgba(0,0,0,.92);color:#fff;overflow:auto;touch-action:pinch-zoom pan-x pan-y">
@@ -67,27 +65,8 @@ function putPhoto(id,ph){bkCache=null;photos.set(id,ph);if(!pdb){banner('⚠️ 
  try{const tx=pdb.transaction('p','readwrite');tx.objectStore('p').put(ph,id);tx.onerror=()=>banner('⚠️ Could not store the photo (storage full or blocked). Export a backup!')}catch(e){banner('⚠️ Could not store the photo: '+e.message)}}
 function dropPhoto(id){photos.delete(id);try{pdb&&pdb.transaction('p','readwrite').objectStore('p').delete(id)}catch(e){}}
 function photoOf(i){const p=photos.get(i.id);return p?p.img:null}
-// ---- on-device image features: average-hash + difference-hash, chroma histogram, 6x6 colour grid ----
-function feat(img){const W=96,c=document.createElement('canvas');c.width=W;c.height=W;const g=c.getContext('2d',{willReadFrequently:true});g.drawImage(img,0,0,W,W);const d=g.getImageData(0,0,W,W).data;
- const gray=(x,y)=>{const k=(y*W+x)*4;return .299*d[k]+.587*d[k+1]+.114*d[k+2]};
- const cell=(n,f)=>{const s=W/n,o=[];for(let y=0;y<n;y++)for(let x=0;x<n;x++){let a=[0,0,0],m=0;for(let yy=Math.floor(y*s);yy<Math.floor((y+1)*s);yy++)for(let xx=Math.floor(x*s);xx<Math.floor((x+1)*s);xx++){const k=(yy*W+xx)*4;a[0]+=d[k];a[1]+=d[k+1];a[2]+=d[k+2];m++}o.push(a.map(v=>v/m))}return o};
- const g9=cell(9).map(a=>.299*a[0]+.587*a[1]+.114*a[2]);let dh='';for(let y=0;y<9;y++)for(let x=0;x<8;x++)dh+=g9[y*9+x]<g9[y*9+x+1]?1:0;
- const g8=cell(8).map(a=>.299*a[0]+.587*a[1]+.114*a[2]),av=g8.reduce((s,v)=>s+v,0)/64;let ah='';g8.forEach(v=>ah+=v>av?1:0);
- const h=new Array(64).fill(0);let n=0;for(let k=0;k<d.length;k+=4){const S=d[k]+d[k+1]+d[k+2]+1,r=d[k]/S,gg=d[k+1]/S,b=Math.max(d[k],d[k+1],d[k+2])/255;h[Math.min(7,r*12|0)*8+Math.min(7,gg*12|0)]+=1;n++}for(let i=0;i<64;i++)h[i]/=n;
- const cg=cell(6),mu=[0,1,2].map(ch=>cg.reduce((s,a)=>s+a[ch],0)/36),gv=[];cg.forEach(a=>a.forEach((v,ch)=>gv.push(v-mu[ch])));const nn=Math.hypot(...gv)||1;
- return{v:1,dh,ah,h,g:gv.map(x=>+(x/nn).toFixed(4))}}
-function ham(a,b){let s=0;for(let i=0;i<a.length;i++)if(a[i]!==b[i])s++;return s/a.length}
-function sim(a,b){const hd=1-ham(a.dh,b.dh),ha=1-ham(a.ah,b.ah);let hi=0;for(let i=0;i<64;i++)hi+=Math.min(a.h[i],b.h[i]);let co=0;for(let i=0;i<a.g.length;i++)co+=a.g[i]*b.g[i];co=(co+1)/2;
- const raw=.2*hd+.2*ha+.25*hi+.35*co;return Math.max(0,Math.min(1,(raw-.55)/.4))}
 function loadImg(src){return new Promise((res,rej)=>{const i=new Image();i.onload=()=>res(i);i.onerror=rej;i.src=src})}
-async function readPhoto(file){const u=URL.createObjectURL(file);try{const img=await loadImg(u);const s=Math.min(1,640/Math.max(img.width,img.height)),c=document.createElement('canvas');c.width=Math.round(img.width*s);c.height=Math.round(img.height*s);c.getContext('2d').drawImage(img,0,0,c.width,c.height);return{img:c.toDataURL('image/jpeg',0.72),f:feat(c)}}finally{try{URL.revokeObjectURL(u)}catch(e){}}}
-async function ensureFeat(id){const p=photos.get(id);if(p&&!p.f){try{p.f=feat(await loadImg(p.img));putPhoto(id,p)}catch(e){}}return p}
-async function findByPhoto(file){$('pmatch').innerHTML='<p class="meta">Comparing on this phone…</p>';let q;try{q=await readPhoto(file)}catch(e){$('pmatch').innerHTML='<p class="meta">Could not read that photo.</p>';return}
- const ids=items.filter(i=>photos.has(i.id)).map(i=>i.id);for(const id of ids)await ensureFeat(id);
- const r=ids.map(id=>[sim(q.f,photos.get(id).f),items.find(x=>x.id===id)]).sort((a,b)=>b[0]-a[0]).slice(0,3);
- if(!r.length){$('pmatch').innerHTML='<p class="meta">No saved items have photos yet.</p>';return}
-  $('pmatch').innerHTML='<p class="meta">Best guess from how the pictures look (colours and shapes), not a sure thing. Check the spot.</p>'+r.map(([s,i])=>`<div class="match" data-id="${i.id}"><button type="button" class="thumb" data-v="${i.id}" aria-label="View photo of ${esc(i.item)}"><img src="${photoOf(i)}" alt="Photo of ${esc(i.item)}"></button><div><b>${esc(i.item)}</b>${i.tag?`<span class="tag">${esc(i.tag)}</span>`:''}<div class="loc">${esc(i.location||'(no location)')}</div><div class="meta">${Math.round(s*100)}% match · ${lab(s)}</div></div></div>`).join('')}
-const lab=s=>s>=.75?'strong':s>=.5?'possible':'weak';
+async function readPhoto(file){const u=URL.createObjectURL(file);try{const img=await loadImg(u);const s=Math.min(1,640/Math.max(img.width,img.height)),c=document.createElement('canvas');c.width=Math.round(img.width*s);c.height=Math.round(img.height*s);c.getContext('2d').drawImage(img,0,0,c.width,c.height);return{img:c.toDataURL('image/jpeg',0.72)}}finally{try{URL.revokeObjectURL(u)}catch(e){}}}
 function tags(){const t=new Set(['garage','shop','kitchen']);items.forEach(i=>i.tag&&t.add(i.tag));return[...t]}
 function chips(box,input){box.innerHTML=tags().map(t=>`<button type="button" class="chip" data-t="${esc(t)}">${esc(t)}</button>`).join('');box.onclick=e=>{const b=e.target.closest('.chip');if(b){input.value=b.dataset.t}}}
 function renderPhotos(){const q=$('pq').value.trim(),ps=items.filter(i=>photos.has(i.id));const r=q?ps.filter(i=>score(i,q)>0):ps;
@@ -178,8 +157,7 @@ function flash(m,act,ms){const f=$('flash');f.textContent=m;if(act){const b=docu
 $('save').onclick=doSave;$('what').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();$('where').focus()}});$('where').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();doSave()}});['what','where'].forEach(k=>$(k).addEventListener('input',()=>{if($(k).value.trim())$(k+'Err').style.display='none'}));
 {const qr=e=>{if(e.type==='input'||$('q').value!==renderedQ)render()};['input','keyup','compositionend','change','search','paste','cut'].forEach(ev=>$('q').addEventListener(ev,qr));}$('place').onchange=render;$('tagf').onchange=render;$('pq').oninput=renderPhotos;
 $('pToggle').onclick=()=>{const v=$('pview'),show=v.style.display==='none';v.style.display=show?'block':'none';$('pToggle').textContent=show?'🖼 Hide photos':'🖼 Show photos';if(show)renderPhotos()};
-$('pgrid').onclick=e=>{const c=e.target.closest('.card');if(c)found(c.dataset.id)};$('pmatch').onclick=e=>{const m=e.target.closest('.match');if(m)found(m.dataset.id)};
-$('fphoto').onchange=e=>{const f=e.target.files&&e.target.files[0];if(f)findByPhoto(f);e.target.value=''};
+$('pgrid').onclick=e=>{const c=e.target.closest('.card');if(c)found(c.dataset.id)};
 $('photo').onchange=async e=>{const f=e.target.files&&e.target.files[0];if(!f)return;try{pendingPhoto=await readPhoto(f);$('prev').src=pendingPhoto.img;$('prev').style.display='block'}catch(x){pendingPhoto=null;banner('Could not read that photo. You can still save without it.')}};
 function mic(target,after){const SR=window.SpeechRecognition||window.webkitSpeechRecognition;const tip='🎤 Voice is not available here. Tap the text box and use the microphone key on your phone keyboard instead.';
  if(!SR){banner(tip);target.focus();return}
@@ -211,7 +189,7 @@ $('bkNow').onclick=()=>backupNow();$('bkTopBtn').onclick=()=>backupNow();$('bkLa
 $('imp').onchange=e=>{const f=e.target.files[0];if(!f)return;f.text().then(t=>{try{flash('Imported '+importData(t)+' items')}catch(x){banner('Could not read that backup')}e.target.value=''})};
 let th=null;try{th=localStorage.getItem('wdipi.theme')}catch(e){}if(th==='dark'||(!th&&window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches))document.body.classList.add('dark');
 $('theme').onclick=()=>{document.body.classList.toggle('dark');try{localStorage.setItem('wdipi.theme',document.body.classList.contains('dark')?'dark':'light')}catch(e){}};
-const APPV='v18';
+const APPV='v19';
 function vnum(v){return parseInt(String(v||'').replace(/\D/g,''))||0}
 async function checkVersion(){try{const r=await fetch('version.json?t='+Date.now(),{cache:'no-store'});if(!r.ok)return;const v=(await r.json()).version;if(vnum(v)>vnum(APPV))showUpdate(v)}catch(e){}}
 function showUpdate(v){if($('upd'))return;const b=document.createElement('button');b.id='upd';b.type='button';b.textContent='🔄 New version available ('+v+') — tap to update';b.style.cssText='display:block;width:100%;margin:0 0 10px;background:#1f6f3f;color:#fff;border:0;border-radius:10px;padding:12px;font-weight:700';b.onclick=hardUpdate;document.body.insertBefore(b,document.body.firstChild)}
@@ -219,7 +197,7 @@ async function hardUpdate(){try{if(navigator.serviceWorker){const rs=await navig
 checkVersion();document.addEventListener('visibilitychange',()=>{if(!document.hidden)checkVersion()});
 try{if('serviceWorker'in navigator&&location.protocol==='https:'){const had=!!navigator.serviceWorker.controller;let reloaded=false;navigator.serviceWorker.addEventListener('controllerchange',()=>{if(had&&!reloaded){let t=0;try{t=+sessionStorage.getItem('wdipi.rl')||0}catch(e){}if(Date.now()-t<10000)return;reloaded=true;try{sessionStorage.setItem('wdipi.rl',Date.now())}catch(e){}location.reload()}});
  navigator.serviceWorker.register('sw.js',{updateViaCache:'none'}).then(r=>{r.update().catch(()=>{});document.addEventListener('visibilitychange',()=>{if(!document.hidden)r.update().catch(()=>{})})}).catch(()=>{})}}catch(e){}
-window.app={get items(){return items},get mode(){return mode},exportData,importData,checkVersion,hardUpdate,backupNow,bkGet,buildBackup,checkBackup,updateBk,reorder,sim,get photos(){return photos},split,search,ready:null};render();window.app.ready=initStorage().then(r=>{bkOn=true;updateBk();return r});
+window.app={get items(){return items},get mode(){return mode},exportData,importData,checkVersion,hardUpdate,backupNow,bkGet,buildBackup,checkBackup,updateBk,reorder,get photos(){return photos},split,search,ready:null};render();window.app.ready=initStorage().then(r=>{bkOn=true;updateBk();return r});
 </script>
-<p class="meta" id="ver" style="text-align:center;margin:16px 0 8px">Where Did I Put It · v18</p>
+<p class="meta" id="ver" style="text-align:center;margin:16px 0 8px">Where Did I Put It · v19</p>
 </body></html>
